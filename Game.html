@@ -8,13 +8,13 @@
 #ninja {
   width: 46px;
   height: 50px;
-  background: url(Ball_Sprites.gif) -126px 0;
+  background: url(Resources/Images/Ninja_Sprites.gif) -126px 0;
 }
 
 #pow {
   width: 60px;
   height: 50px;
-  background: url(Ball_Sprites.gif) -230px 0px;
+  background: url(Resources/Images/Ninja_Sprites.gif) -230px 0px;
 }
 .imgContainer{
     float:left;
@@ -23,10 +23,10 @@
 </head>
 <body>
 <div class="imgContainer">
-	<img id="ninja" src="img_trans.gif" width="1" height="1"><br><br>
+	<img id="ninja" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
 <div class="imgContainer">
-	<img id="pow" src="img_trans.gif" width="1" height="1"><br><br>
+	<img id="pow" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
 </body>
 
@@ -34,9 +34,10 @@
 
 	var stepCounter = 0;
 	var stepDelta = 1;
-	var audioPunch = new Audio('./punch.wav');
-	var audioStepLeft = new Audio('./StepLeft.wav');
-	var audioStepRight = new Audio('./StepRight.wav');
+	var root = 'Resources/Audio/';
+	var audioPunch = new Audio(root + 'punch.wav');
+	var audioStepLeft = new Audio(root + 'StepLeft.wav');
+	var audioStepRight = new Audio(root + 'StepRight.wav');
 	
 	var ninjaImg = document.getElementById("ninja");
 	var powImg = document.getElementById("pow");
