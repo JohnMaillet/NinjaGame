@@ -1,0 +1,3938 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ninja Attack!</title>
+<style>
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+#scene {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: -2;
+}
+
+#ninja {
+  width: 46px;
+  height: 50px;
+  background: url(Resources/Images/Ninja_Sprites.gif) -126px 0;
+}
+
+#pow {
+  width: 60px;
+  height: 50px;
+  background: url(Resources/Images/Ninja_Sprites.gif) -230px 0px;
+}
+.imgContainer{
+    float:left;
+}
+
+#musicBtn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  padding: 6px 14px;
+  font: 14px/1.2 "Segoe UI", system-ui, sans-serif;
+  color: #ffe8c2;
+  background: rgba(43, 27, 74, 0.75);
+  border: 1px solid rgba(255, 220, 180, 0.5);
+  border-radius: 999px;
+  cursor: pointer;
+}
+#musicBtn:hover {
+  background: rgba(43, 27, 74, 0.9);
+}
+
+#hint {
+  position: fixed;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font: 13px/1.2 "Segoe UI", system-ui, sans-serif;
+  color: #fff3de;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+  pointer-events: none;
+}
+
+#front {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#musicBtn, #hint {
+  z-index: 6;
+}
+
+#inventory {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  display: flex;
+  gap: 8px;
+}
+#starCount, #knifeCount {
+  padding: 6px 14px;
+  font: 14px/1.2 "Segoe UI", system-ui, sans-serif;
+  color: #ffe8c2;
+  background: rgba(43, 27, 74, 0.75);
+  border: 1px solid rgba(255, 220, 180, 0.5);
+  border-radius: 999px;
+}
+#starCount[hidden], #knifeCount[hidden] {
+  display: none;
+}
+
+.thug {
+  position: absolute;
+  width: 64px;
+  height: 56px;
+  background: url(Resources/Images/Thug_Sprites.png) 0 0;
+  display: none;
+  pointer-events: none;
+  transform-origin: 50% 96%;
+}
+
+.speech {
+  position: absolute;
+  z-index: 6;
+  padding: 2px 7px;
+  font: bold 13px/1.2 "Segoe UI", system-ui, sans-serif;
+  color: #2b1b4a;
+  background: #fff8e8;
+  border: 2px solid #2b1b4a;
+  border-radius: 10px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.speech::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-top-color: #2b1b4a;
+  border-bottom: 0;
+}
+.speech.alert {
+  color: #fff;
+  background: #d8322a;
+  border-color: #5a0f0a;
+}
+.speech[hidden] {
+  display: none;
+}
+
+#scenePicker {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 4px 6px 4px 14px;
+  font: 14px/1.2 "Segoe UI", system-ui, sans-serif;
+  color: #ffe8c2;
+  background: rgba(43, 27, 74, 0.75);
+  border: 1px solid rgba(255, 220, 180, 0.5);
+  border-radius: 999px;
+}
+#sceneSelect {
+  margin-left: 6px;
+  padding: 2px 8px;
+  font: inherit;
+  color: #2b1b4a;
+  background: #ffe8c2;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.ronin {
+  position: absolute;
+  width: 80px;
+  height: 64px;
+  background: url(Resources/Images/Villain_Sprites.png) 0 0;
+  display: none;
+  pointer-events: none;
+}
+
+.ronin-hp {
+  position: absolute;
+  width: 44px;
+  height: 5px;
+  background: rgba(20, 0, 8, 0.7);
+  border-radius: 3px;
+  overflow: hidden;
+  display: none;
+  pointer-events: none;
+}
+.ronin-hp div {
+  height: 100%;
+  background: #ff4a3a;
+}
+
+#bossBar {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px;
+  font: bold 13px/1.2 "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffd2c8;
+  background: rgba(40, 6, 14, 0.8);
+  border: 1px solid rgba(255, 120, 100, 0.6);
+  border-radius: 999px;
+}
+#bossBar[hidden] {
+  display: none;
+}
+#bossBar .meter {
+  width: 160px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#bossHealth {
+  width: 100%;
+  height: 100%;
+  background: #ff4a3a;
+  transition: width 0.2s;
+}
+/* During the clan fight the meter counts down to the next ronin's arrival */
+#bossHealth.reinforce {
+  background: #ffb43a;
+  transition: none;
+}
+
+#minimap {
+  position: fixed;
+  top: 52px;
+  right: 12px;
+  z-index: 6;
+  border: 1px solid rgba(255, 220, 180, 0.4);
+  border-radius: 8px;
+}
+#minimap[hidden] {
+  display: none;
+}
+
+#toast {
+  position: fixed;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  padding: 10px 22px;
+  font: bold 20px/1.2 "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  color: #ffe8c2;
+  background: rgba(20, 12, 28, 0.85);
+  border: 1px solid rgba(255, 220, 180, 0.5);
+  border-radius: 999px;
+  pointer-events: none;
+}
+#toast[hidden] {
+  display: none;
+}
+
+#moves {
+  position: absolute;
+  width: 64px;
+  height: 50px;
+  background: url(Resources/Images/Ninja_Moves.png) 0 0;
+  display: none;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<canvas id="front"></canvas>
+<div class="imgContainer">
+	<img id="ninja" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
+</div>
+<div id="moves"></div>
+<div class="imgContainer">
+	<img id="pow" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
+</div>
+<button id="musicBtn" type="button">&#9835; Music: On</button>
+<canvas id="minimap" width="138" height="112" hidden></canvas>
+<div id="toast" hidden></div>
+<div id="inventory"><div id="starCount" hidden></div><div id="knifeCount" hidden></div></div>
+<label id="scenePicker">Scene:
+	<select id="sceneSelect">
+		<option value="map">Village Map (top-down)</option>
+		<option value="dojo">Sunset Dojo</option>
+		<option value="forest">Moonlit Bamboo Forest</option>
+		<option value="dungeon">The Crypt (dungeon)</option>
+		<option value="trailer">&#127916; Trailer (3D video)</option>
+	</select>
+</label>
+<div id="bossBar" hidden><span id="bossName">Oni Ronin</span><div class="meter"><div id="bossHealth"></div></div></div>
+<div id="hint">&larr; &rarr;: walk &middot; Shift: run &middot; Space: jump (hold an arrow to jump sideways) &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; attack mid-jump &middot; kick the gate for ninja stars, T: throw &middot; beaten thugs may drop knives: E thrust, Q throw &middot; hold S: stealth &middot; in the Crypt, &uarr;&darr; climb ladders &middot; other keys: punch &middot; walk left from a scene's start: village map</div>
+</body>
+
+<script>
+	// ---- Side-scrolling scenes ----
+	// The world scrolls sideways as the ninja walks, like an old side-scroller. Each layer moves at
+	// its own speed ("depth", where 1 = the path the ninja walks on): the sky stays put, distant
+	// layers creep by, props beside the path move faster, and the foreground (drawn on a second
+	// canvas, in front of the ninja) moves fastest. That difference sells the depth.
+	// Each scene in THEMES supplies its own colors, scenery layers, particles and foreground.
+	var scene = (function(){
+		var canvas = document.getElementById("scene");
+		var ctx = canvas.getContext("2d");
+		var frontCanvas = document.getElementById("front");
+		var fctx = frontCanvas.getContext("2d");
+		var ninja = document.getElementById("ninja");
+		var W, H, horizon, groundY, scale, s;
+		var cameraX = 0, lastCameraX = 0;
+		var stars = [], clouds = [], particles = [], sparks = [], trees = [];
+		var shuriken = [], thrown = [], collectHandler = null, thrownHandler = null, gateShake = 0, lastGateKick = -1;
+		var flash = 0, shake = 0, time = 0, last = performance.now(), shadowY = null;
+		var theme, renderer = null;
+
+		function seeded(seed){
+			return function(){
+				seed = (seed * 16807) % 2147483647;
+				return (seed - 1) / 2147483646;
+			};
+		}
+
+		// Repeatable pseudo-random number in [0, 1) for a given number
+		function hash(n){
+			var x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+			return x - Math.floor(x);
+		}
+
+		// A cherry tree shape in local units (trunk base at 0, 0; about 450 units tall)
+		function makeTree(seed){
+			var rnd = seeded(seed), shape = { branches: [], blossoms: [] };
+			(function grow(x, y, angle, len, width, depth){
+				var x2 = x + Math.cos(angle) * len;
+				var y2 = y + Math.sin(angle) * len;
+				shape.branches.push({ x1: x, y1: y, x2: x2, y2: y2, w: width });
+				if (depth === 0) {
+					shape.blossoms.push({ x: x2, y: y2, r: 16 + rnd() * 12 });
+					return;
+				}
+				if (depth < 3) {
+					shape.blossoms.push({ x: (x + x2) / 2, y: (y + y2) / 2, r: 12 + rnd() * 9 });
+				}
+				grow(x2, y2, angle - 0.3 - rnd() * 0.3, len * 0.74, width * 0.66, depth - 1);
+				grow(x2, y2, angle + 0.3 + rnd() * 0.3, len * 0.7, width * 0.66, depth - 1);
+			})(0, 0, -Math.PI / 2 + (rnd() - 0.5) * 0.5, 150, 24, 6);
+			return shape;
+		}
+
+		function sizeCanvas(c, context, dpr){
+			c.width = Math.round(W * dpr);
+			c.height = Math.round(H * dpr);
+			c.style.width = W + "px";
+			c.style.height = H + "px";
+			context.setTransform(dpr, 0, 0, dpr, 0, 0);
+		}
+
+		function resize(){
+			var dpr = window.devicePixelRatio || 1;
+			W = window.innerWidth;
+			H = window.innerHeight;
+			sizeCanvas(canvas, ctx, dpr);
+			sizeCanvas(frontCanvas, fctx, dpr);
+			horizon = H * 0.68;
+			groundY = H * 0.8;
+			scale = Math.min(W, H) / 800;
+			s = H / 900;
+
+			var rnd = seeded(7);
+			stars = [];
+			for (var i = 0; i < 90; i++) {
+				stars.push({ x: rnd() * W, y: rnd() * horizon * 0.5, s: 0.4 + rnd() * 1.3, t: rnd() * 6.28 });
+			}
+			clouds = [];
+			for (var c = 0; c < 6; c++) {
+				clouds.push({ x: rnd() * W, y: H * 0.14 + rnd() * (horizon - H * 0.38), w: 120 + rnd() * 220, h: 6 + rnd() * 8, v: 4 + rnd() * 10 });
+			}
+			if (trees.length === 0) {
+				for (var t = 0; t < 3; t++) trees.push(makeTree(11 + t * 17));
+			}
+		}
+
+		// Calls draw(screenX, r1, r2) for every prop slot of a layer that's near the screen.
+		// Slots repeat forever, and r1/r2 are stable random numbers for that slot.
+		function eachProp(depth, spacing, margin, seed, draw){
+			var off = cameraX * depth;
+			var first = Math.floor((off - margin - spacing) / spacing);
+			var lastSlot = Math.floor((off + W + margin) / spacing);
+			for (var i = first; i <= lastSlot; i++) {
+				var r1 = hash(i * 13 + seed), r2 = hash(i * 7 + seed * 31);
+				draw(i * spacing + r1 * spacing * 0.5 - off, r1, r2);
+			}
+		}
+
+		// Rolling hills that go on forever as the camera moves
+		function drawHills(depth, base, amp, seed, color){
+			var off = cameraX * depth;
+			ctx.fillStyle = color;
+			ctx.beginPath();
+			ctx.moveTo(-20, H);
+			for (var sx = -20; sx <= W + 20; sx += 10) {
+				var x = sx + off;
+				var wave = 0.5 + 0.28 * Math.sin(x * 0.004 + seed) + 0.14 * Math.sin(x * 0.011 + seed * 2.3) + 0.08 * Math.sin(x * 0.027 + seed * 5.1);
+				ctx.lineTo(sx, base - amp * wave);
+			}
+			ctx.lineTo(W + 20, H);
+			ctx.closePath();
+			ctx.fill();
+		}
+
+		function drawFuji(cx){
+			var h = H * 0.36;
+			var bw = Math.min(W * 0.34, h * 1.9);
+			var peak = horizon - h;
+			ctx.save();
+			ctx.beginPath();
+			ctx.moveTo(cx - bw, horizon);
+			ctx.quadraticCurveTo(cx - bw * 0.35, horizon - h * 0.55, cx - bw * 0.1, peak);
+			ctx.lineTo(cx + bw * 0.1, peak);
+			ctx.quadraticCurveTo(cx + bw * 0.35, horizon - h * 0.55, cx + bw, horizon);
+			ctx.closePath();
+			ctx.fillStyle = "#9a5a86";
+			ctx.fill();
+			ctx.clip();
+			// Snow cap with a jagged lower edge
+			ctx.fillStyle = "#fbe7ef";
+			ctx.beginPath();
+			ctx.moveTo(cx - bw, peak - 10);
+			ctx.lineTo(cx + bw, peak - 10);
+			var capY = peak + h * 0.24;
+			for (var i = 10; i >= 0; i--) {
+				var x = cx - bw * 0.5 + bw * i / 10;
+				ctx.lineTo(x, capY + (i % 2 ? h * 0.07 : 0));
+			}
+			ctx.closePath();
+			ctx.fill();
+			ctx.restore();
+		}
+
+		function drawPagoda(x, baseY, ps, color){
+			ctx.fillStyle = color;
+			// Mound so the pagoda never floats above a dip in the hills
+			ctx.fillRect(x - 34 * ps, baseY, 68 * ps, H * 0.06);
+			var y = baseY;
+			for (var k = 0; k < 5; k++) {
+				var tw = (64 - k * 9) * ps;
+				var bodyH = 13 * ps;
+				var roofH = 7 * ps;
+				ctx.fillRect(x - tw * 0.3, y - bodyH, tw * 0.6, bodyH);
+				ctx.beginPath();
+				ctx.moveTo(x - tw / 2 - 5 * ps, y - bodyH - 1 * ps);
+				ctx.quadraticCurveTo(x - tw * 0.32, y - bodyH, x - tw * 0.24, y - bodyH - roofH);
+				ctx.lineTo(x + tw * 0.24, y - bodyH - roofH);
+				ctx.quadraticCurveTo(x + tw * 0.32, y - bodyH, x + tw / 2 + 5 * ps, y - bodyH - 1 * ps);
+				ctx.closePath();
+				ctx.fill();
+				y -= bodyH + roofH;
+			}
+			ctx.fillRect(x - 1.5 * ps, y - 22 * ps, 3 * ps, 22 * ps);
+		}
+
+		// colors: { post, top } (painted wood for the dojo, mossy stone in the forest)
+		function drawTorii(x, baseY, h, colors){
+			ctx.fillStyle = "rgba(20, 10, 30, 0.18)";
+			ctx.beginPath();
+			ctx.ellipse(x, baseY + 2, h * 0.55, h * 0.05, 0, 0, Math.PI * 2);
+			ctx.fill();
+
+			var post = h * 0.07;
+			ctx.fillStyle = colors.post;
+			ctx.fillRect(x - h * 0.36 - post / 2, baseY - h * 0.88, post, h * 0.88);
+			ctx.fillRect(x + h * 0.36 - post / 2, baseY - h * 0.88, post, h * 0.88);
+			ctx.fillRect(x - h * 0.5, baseY - h * 0.72, h, h * 0.05);
+			ctx.fillRect(x - h * 0.52, baseY - h * 0.87, h * 1.04, h * 0.055);
+			ctx.fillRect(x - h * 0.025, baseY - h * 0.82, h * 0.05, h * 0.1);
+
+			ctx.fillStyle = colors.top;
+			ctx.beginPath();
+			ctx.moveTo(x - h * 0.62, baseY - h * 0.98);
+			ctx.quadraticCurveTo(x, baseY - h * 0.88, x + h * 0.62, baseY - h * 0.98);
+			ctx.lineTo(x + h * 0.56, baseY - h * 0.9);
+			ctx.quadraticCurveTo(x, baseY - h * 0.82, x - h * 0.56, baseY - h * 0.9);
+			ctx.closePath();
+			ctx.fill();
+		}
+
+		function drawTree(g, shape, x, baseY, ts){
+			g.save();
+			g.translate(x, baseY);
+			g.scale(ts, ts);
+			g.lineCap = "round";
+			g.strokeStyle = "#3d2230";
+			for (var i = 0; i < shape.branches.length; i++) {
+				var b = shape.branches[i];
+				g.lineWidth = Math.max(1 / ts, b.w);
+				g.beginPath();
+				g.moveTo(b.x1, b.y1);
+				g.lineTo(b.x2, b.y2);
+				g.stroke();
+			}
+			var pinks = ["#f48fb1", "#f7a8c4", "#ffd1e0"];
+			for (var j = 0; j < shape.blossoms.length; j++) {
+				var bl = shape.blossoms[j];
+				for (var k = 0; k < 3; k++) {
+					g.fillStyle = pinks[k];
+					g.beginPath();
+					g.arc(bl.x + (k - 1) * bl.r * 0.45, bl.y - k * bl.r * 0.3, bl.r * (1 - k * 0.22), 0, Math.PI * 2);
+					g.fill();
+				}
+			}
+			g.restore();
+		}
+
+		function drawStoneLantern(x, baseY, ls){
+			var glow = ctx.createRadialGradient(x, baseY - 56 * ls, 2, x, baseY - 56 * ls, 34 * ls);
+			glow.addColorStop(0, "rgba(255, 200, 110, 0.45)");
+			glow.addColorStop(1, "rgba(255, 200, 110, 0)");
+			ctx.fillStyle = glow;
+			ctx.fillRect(x - 34 * ls, baseY - 90 * ls, 68 * ls, 68 * ls);
+			ctx.fillStyle = "#6f6275";
+			ctx.fillRect(x - 16 * ls, baseY - 8 * ls, 32 * ls, 8 * ls);
+			ctx.fillRect(x - 5 * ls, baseY - 40 * ls, 10 * ls, 32 * ls);
+			ctx.fillRect(x - 14 * ls, baseY - 46 * ls, 28 * ls, 6 * ls);
+			ctx.fillRect(x - 11 * ls, baseY - 66 * ls, 22 * ls, 20 * ls);
+			ctx.fillStyle = "#ffd27a";
+			ctx.fillRect(x - 5 * ls, baseY - 62 * ls, 10 * ls, 12 * ls);
+			ctx.fillStyle = "#5a4e60";
+			ctx.beginPath();
+			ctx.moveTo(x - 22 * ls, baseY - 66 * ls);
+			ctx.lineTo(x + 22 * ls, baseY - 66 * ls);
+			ctx.lineTo(x + 8 * ls, baseY - 78 * ls);
+			ctx.lineTo(x - 8 * ls, baseY - 78 * ls);
+			ctx.closePath();
+			ctx.fill();
+			ctx.fillRect(x - 3 * ls, baseY - 86 * ls, 6 * ls, 8 * ls);
+		}
+
+		// palette: { stalks: [color, color], nodes, leaves }
+		function drawBamboo(g, x, baseY, bs, r, palette){
+			var stalks = 3 + Math.floor(r * 3);
+			for (var i = 0; i < stalks; i++) {
+				var sx = x + (i - stalks / 2) * 11 * bs;
+				var h = (130 + hash(i * 5 + r * 1000) * 90) * bs;
+				g.fillStyle = palette.stalks[i % 2];
+				g.fillRect(sx - 3.5 * bs, baseY - h, 7 * bs, h);
+				g.fillStyle = palette.nodes;
+				for (var n = baseY - 28 * bs; n > baseY - h; n -= 28 * bs) g.fillRect(sx - 4 * bs, n, 8 * bs, 2 * bs);
+				g.fillStyle = palette.leaves;
+				for (var l = 0; l < 3; l++) {
+					g.beginPath();
+					g.ellipse(sx + (l - 1) * 9 * bs, baseY - h + l * 10 * bs, 11 * bs, 3 * bs, (l - 1) * 0.6, 0, Math.PI * 2);
+					g.fill();
+				}
+			}
+		}
+
+		function drawBush(x, baseY, bs){
+			ctx.fillStyle = "#5b7d44";
+			[[-18, -14, 18], [0, -22, 22], [18, -13, 17]].forEach(function(b){
+				ctx.beginPath();
+				ctx.arc(x + b[0] * bs, baseY + b[1] * bs, b[2] * bs, 0, Math.PI * 2);
+				ctx.fill();
+			});
+			ctx.fillStyle = "#f7a8c4";
+			for (var i = 0; i < 5; i++) {
+				ctx.beginPath();
+				ctx.arc(x + (i * 11 - 22) * bs, baseY - (18 + (i % 2) * 10) * bs, 2.5 * bs, 0, Math.PI * 2);
+				ctx.fill();
+			}
+		}
+
+		function drawFence(x, baseY, fs){
+			ctx.fillStyle = "#6b4a3a";
+			ctx.fillRect(x - 60 * fs, baseY - 44 * fs, 6 * fs, 44 * fs);
+			ctx.fillRect(x + 54 * fs, baseY - 44 * fs, 6 * fs, 44 * fs);
+			ctx.fillRect(x - 64 * fs, baseY - 38 * fs, 128 * fs, 5 * fs);
+			ctx.fillRect(x - 64 * fs, baseY - 22 * fs, 128 * fs, 5 * fs);
+		}
+
+		function drawFern(x, baseY, fs, r){
+			ctx.strokeStyle = "#3e7a62";
+			ctx.lineWidth = 3 * fs;
+			ctx.lineCap = "round";
+			for (var i = -3; i <= 3; i++) {
+				var len = (38 - Math.abs(i) * 5) * fs * (0.8 + r * 0.4);
+				var a = -Math.PI / 2 + i * 0.35;
+				ctx.beginPath();
+				ctx.moveTo(x, baseY);
+				ctx.quadraticCurveTo(x + Math.cos(a) * len * 0.6, baseY + Math.sin(a) * len * 0.9, x + Math.cos(a) * len * 1.1, baseY + Math.sin(a) * len * 0.6);
+				ctx.stroke();
+			}
+		}
+
+		// The kickable torii gate standing on the path in the first screen
+		function gate(){
+			return { x: W * 0.66 - cameraX, base: groundY + 6, h: H * 0.26 };
+		}
+
+		function drawShuriken(g, x, y, r, rot){
+			g.save();
+			g.translate(x, y);
+			g.rotate(rot);
+			g.fillStyle = "#3b3f4a";
+			g.beginPath();
+			for (var i = 0; i < 8; i++) {
+				var a = i * Math.PI / 4, reach = i % 2 ? r * 0.35 : r;
+				g.lineTo(Math.cos(a) * reach, Math.sin(a) * reach);
+			}
+			g.closePath();
+			g.fill();
+			g.strokeStyle = "rgba(220, 225, 235, 0.8)";
+			g.lineWidth = 1;
+			g.stroke();
+			g.fillStyle = "#c9ccd6";
+			g.beginPath();
+			g.arc(0, 0, r * 0.18, 0, Math.PI * 2);
+			g.fill();
+			g.restore();
+		}
+
+		function drawKnife(g, x, y, rot){
+			g.save();
+			g.translate(x, y);
+			g.rotate(rot);
+			g.fillStyle = "#d8dde6";
+			g.beginPath();
+			g.moveTo(-2, -2.5);
+			g.lineTo(13, -1.5);
+			g.lineTo(18, 0.5);
+			g.lineTo(-2, 2.5);
+			g.closePath();
+			g.fill();
+			g.fillStyle = "#c9a23a";
+			g.fillRect(-4, -4.5, 2.5, 9);
+			g.fillStyle = "#5a3a22";
+			g.fillRect(-12, -2, 8, 4);
+			g.restore();
+		}
+
+		// The stone path the ninja walks on; its tile seams move exactly with the ninja
+		function drawPath(){
+			var colors = theme.path;
+			var top = groundY - 4, h = Math.max(16, 22 * scale);
+			ctx.fillStyle = colors.fill;
+			ctx.fillRect(-20, top, W + 40, h);
+			ctx.fillStyle = colors.edge;
+			ctx.fillRect(-20, top, W + 40, 2);
+			ctx.fillRect(-20, top + h - 2, W + 40, 2);
+			var tile = 56, offset = ((cameraX % tile) + tile) % tile;
+			ctx.fillStyle = colors.seam;
+			for (var tx = -offset; tx < W + tile; tx += tile) ctx.fillRect(Math.round(tx), top + 2, 2, h - 4);
+		}
+
+		function drawLantern(x, y, i){
+			ctx.save();
+			ctx.translate(x, y);
+			ctx.rotate(Math.sin(time * 1.4 + i * 1.7) * 0.09);
+
+			var glow = ctx.createRadialGradient(0, 24, 4, 0, 24, 44);
+			glow.addColorStop(0, "rgba(255, 190, 90, 0.45)");
+			glow.addColorStop(1, "rgba(255, 190, 90, 0)");
+			ctx.fillStyle = glow;
+			ctx.fillRect(-44, -20, 88, 88);
+
+			ctx.strokeStyle = "rgba(40, 20, 30, 0.8)";
+			ctx.lineWidth = 1.5;
+			ctx.beginPath();
+			ctx.moveTo(0, 0);
+			ctx.lineTo(0, 10);
+			ctx.stroke();
+			ctx.fillStyle = "#2a1a22";
+			ctx.fillRect(-6, 9, 12, 4);
+			ctx.fillRect(-6, 37, 12, 4);
+			ctx.fillStyle = "#e2483c";
+			ctx.beginPath();
+			ctx.ellipse(0, 25, 13, 13, 0, 0, Math.PI * 2);
+			ctx.fill();
+			ctx.strokeStyle = "rgba(120, 20, 20, 0.5)";
+			ctx.lineWidth = 1;
+			for (var r = -8; r <= 8; r += 4) {
+				ctx.beginPath();
+				ctx.moveTo(-12 + Math.abs(r) * 0.3, 25 + r);
+				ctx.lineTo(12 - Math.abs(r) * 0.3, 25 + r);
+				ctx.stroke();
+			}
+			ctx.restore();
+		}
+
+		// Strings of lanterns overhead, scrolling a little slower than the path
+		function drawLanterns(){
+			var spacing = 340, sag = 46;
+			eachProp(0.9, spacing, spacing, 17, function(x, r1){
+				var x0 = x - r1 * spacing * 0.5;   // strings join end to end, so ignore the slot jitter
+				ctx.strokeStyle = "rgba(40, 20, 30, 0.8)";
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				ctx.moveTo(x0, 14);
+				ctx.quadraticCurveTo(x0 + spacing / 2, 14 + sag * 2, x0 + spacing, 14);
+				ctx.stroke();
+				drawLantern(x0 + spacing / 2, 14 + sag, Math.round(x0 / spacing));
+			});
+		}
+
+		// ---- Particles: falling cherry petals (dojo) and drifting fireflies (forest) ----
+		var PETALS = {
+			create: function(anywhere){
+				return {
+					x: anywhere ? Math.random() * W : W * (0.3 + Math.random() * 0.8),
+					y: anywhere ? Math.random() * H : -20 + Math.random() * H * 0.4,
+					vx: -30 - Math.random() * 40,
+					vy: 25 + Math.random() * 35,
+					rot: Math.random() * 6.28,
+					vr: -2 + Math.random() * 4,
+					size: 3 + Math.random() * 3,
+					sway: Math.random() * 6.28
+				};
+			},
+			// Returns false when the petal has left the screen and should be replaced
+			update: function(p, dt, camDelta){
+				p.x += (p.vx + Math.sin(time * 1.3 + p.sway) * 25) * dt - camDelta * 0.9;
+				p.y += p.vy * dt;
+				p.rot += p.vr * dt;
+				return !(p.y > H + 20 || p.x < -40 || p.x > W + 40);
+			},
+			draw: function(p){
+				ctx.save();
+				ctx.translate(p.x, p.y);
+				ctx.rotate(p.rot);
+				ctx.fillStyle = "#ffb7cf";
+				ctx.beginPath();
+				ctx.ellipse(0, 0, p.size, p.size * 0.55, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.restore();
+			}
+		};
+
+		var FIREFLIES = {
+			create: function(){
+				return { x: Math.random() * W, y: horizon - H * 0.08 + Math.random() * (groundY - horizon + H * 0.06), phase: Math.random() * 6.28 };
+			},
+			update: function(p, dt, camDelta){
+				p.x += Math.sin(time * 0.7 + p.phase) * 22 * dt - camDelta * 0.8;
+				p.y += Math.cos(time * 0.9 + p.phase * 1.3) * 16 * dt;
+				if (p.x < -20) p.x += W + 40;
+				else if (p.x > W + 20) p.x -= W + 40;
+				return true;
+			},
+			draw: function(p){
+				var a = 0.3 + 0.7 * Math.max(0, Math.sin(time * 2.5 + p.phase));
+				ctx.fillStyle = "rgba(210, 255, 130, " + (a * 0.25) + ")";
+				ctx.beginPath();
+				ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "rgba(230, 255, 160, " + a + ")";
+				ctx.beginPath();
+				ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+				ctx.fill();
+			}
+		};
+
+		var DOJO_BAMBOO = { stalks: ["#4d7a3a", "#5f8c46"], nodes: "rgba(30, 50, 20, 0.45)", leaves: "#6fa052" };
+		var GROVE_BAMBOO = { stalks: ["#2d4f5c", "#27465a"], nodes: "rgba(10, 20, 30, 0.45)", leaves: "#35606a" };
+		var FOREST_BAMBOO = { stalks: ["#3f6f5e", "#335f52"], nodes: "rgba(10, 30, 25, 0.5)", leaves: "#4f8a6e" };
+		var SHADOW_BAMBOO = { stalks: ["#101a2c", "#0c1524"], nodes: "rgba(0, 0, 0, 0.4)", leaves: "#142238" };
+
+		// ---- Scenes ----
+		// sky/ground: gradient colors; body: the sun or moon (x as a fraction of the width, y as a
+		// fraction of the height above the horizon, r as a fraction of the smaller screen side)
+		var THEMES = {
+			dojo: {
+				sky: ["#2b1b4a", "#a8457a", "#f5925a", "#ffd98a"],
+				ground: ["#f0c890", "#c98f5e"],
+				horizonLine: "rgba(110, 50, 80, 0.18)",
+				body: { x: 0.28, y: 0.2, r: 0.11, color: "#fff0c8", glow: "255, 235, 170" },
+				cloud: "rgba(255, 215, 195, 0.35)",
+				path: { fill: "#dcb98f", edge: "rgba(120, 70, 50, 0.35)", seam: "rgba(120, 70, 50, 0.28)" },
+				gate: { post: "#c7362f", top: "#2a1a22" },
+				grass: ["#6b8f4e", "#577a3e"],
+				particle: PETALS,
+				particleCount: 50,
+				drawFar: function(){
+					drawHills(0.05, horizon - H * 0.05, H * 0.12, 1, "#c9788f");
+					eachProp(0.07, W * 1.8, W * 0.4, 3, function(x, r1){
+						if (r1 < 0.8) drawFuji(x);
+					});
+					eachProp(0.15, 300 + 700 * s, 120, 5, function(x, r1, r2){
+						if (r2 < 0.5) drawPagoda(x, horizon - H * 0.035, H / 1000, "#6e3f6b");
+					});
+					drawHills(0.15, horizon + H * 0.005, H * 0.05, 4, "#6e3f6b");
+				},
+				drawNear: function(){
+					// Torii gates further back
+					var backBase = horizon + H * 0.03;
+					eachProp(0.45, 200 + 500 * s, 200 * s, 7, function(x, r1, r2){
+						if (r2 < 0.6) drawTorii(x, backBase, H * 0.17, THEMES.dojo.gate);
+					});
+					// Right behind the path: stone lanterns, bamboo, bushes and fences
+					eachProp(0.75, 60 + 230 * s, 150 * s, 11, function(x, r1, r2){
+						if (r2 < 0.3) drawStoneLantern(x, groundY, s);
+						else if (r2 < 0.55) drawBamboo(ctx, x, groundY, s, r1, DOJO_BAMBOO);
+						else if (r2 < 0.8) drawBush(x, groundY, s);
+						else drawFence(x, groundY, s);
+					});
+				},
+				drawOverhead: drawLanterns,
+				drawFront: function(){
+					// Cherry trees rising from the bottom of the screen: the ninja walks behind them
+					eachProp(1.3, W * 0.9, W * 0.45, 19, function(x, r1, r2){
+						if (r2 < 0.5) drawTree(fctx, trees[Math.floor(r1 * trees.length)], x, H + 30, H * 0.8 / 450);
+					});
+					// Tall bamboo in front now and then (never on the first screen, which stays as it is)
+					eachProp(1.3, W * 0.55, 200, 23, function(x, r1, r2){
+						if (r2 < 0.35 && x + cameraX * 1.3 > W * 1.1) drawBamboo(fctx, x, H + 10, H / 420, r1, DOJO_BAMBOO);
+					});
+				}
+			},
+
+			forest: {
+				sky: ["#070b1f", "#16214a", "#2c3f72", "#5a6f9e"],
+				// Lighter toward the path so the dark ninja stands out against it
+				ground: ["#56658f", "#8e9bbb"],
+				horizonLine: "rgba(10, 16, 40, 0.25)",
+				body: { x: 0.72, y: 0.36, r: 0.075, color: "#f4f1de", glow: "190, 210, 255", craters: true },
+				cloud: "rgba(170, 190, 230, 0.16)",
+				path: { fill: "#b9c2d6", edge: "rgba(40, 50, 80, 0.35)", seam: "rgba(40, 50, 80, 0.3)" },
+				gate: { post: "#8a93a8", top: "#4a5064" },
+				grass: ["#2f4a4a", "#243c3e"],
+				particle: FIREFLIES,
+				particleCount: 30,
+				drawFar: function(){
+					drawHills(0.05, horizon - H * 0.08, H * 0.14, 2, "#1d2748");
+					// A distant bamboo grove, in silhouette
+					eachProp(0.15, 16, 20, 29, function(x, r1, r2){
+						var h = H * (0.2 + r1 * 0.18);
+						ctx.fillStyle = r2 < 0.5 ? "#24345e" : "#2a3b66";
+						ctx.fillRect(x, horizon + H * 0.02 - h, 3 + r2 * 3, h);
+					});
+					// Mist settling over the grove
+					var mist = ctx.createLinearGradient(0, horizon - H * 0.12, 0, horizon);
+					mist.addColorStop(0, "rgba(190, 205, 235, 0)");
+					mist.addColorStop(1, "rgba(190, 205, 235, 0.35)");
+					ctx.fillStyle = mist;
+					ctx.fillRect(-20, horizon - H * 0.12, W + 40, H * 0.12);
+				},
+				drawNear: function(){
+					// Taller bamboo and glowing lanterns further back
+					var backBase = horizon + H * 0.03;
+					eachProp(0.45, 90 + 160 * s, 120 * s, 31, function(x, r1, r2){
+						if (r2 < 0.55) drawBamboo(ctx, x, backBase, s * 1.3, r1, GROVE_BAMBOO);
+						else if (r2 < 0.75) drawStoneLantern(x, backBase, s * 0.8);
+					});
+					// Beside the path: lanterns, bamboo and ferns
+					eachProp(0.75, 60 + 230 * s, 150 * s, 37, function(x, r1, r2){
+						if (r2 < 0.3) drawStoneLantern(x, groundY, s);
+						else if (r2 < 0.6) drawBamboo(ctx, x, groundY, s, r1, FOREST_BAMBOO);
+						else if (r2 < 0.85) drawFern(x, groundY, s, r1);
+					});
+				},
+				// Bamboo leaves hanging down from above
+				drawOverhead: function(){
+					eachProp(0.9, 110, 80, 41, function(x, r1, r2){
+						if (r2 > 0.7) return;
+						ctx.fillStyle = r2 < 0.35 ? "#0e1830" : "#132040";
+						for (var l = 0; l < 4; l++) {
+							ctx.beginPath();
+							ctx.ellipse(x + (l - 1.5) * 14, 10 + l * 9 + r1 * 20, 22, 5, 0.5 + (l - 1.5) * 0.3 + Math.sin(time * 0.8 + r1 * 6) * 0.05, 0, Math.PI * 2);
+							ctx.fill();
+						}
+					});
+				},
+				drawFront: function(){
+					// Dark bamboo passing in front of the ninja
+					eachProp(1.3, W * 0.45, 200, 43, function(x, r1, r2){
+						if (r2 < 0.45 && x + cameraX * 1.3 > W * 1.1) drawBamboo(fctx, x, H + 10, H / 420, r1, SHADOW_BAMBOO);
+					});
+				}
+			}
+		};
+
+		// Grass along the bottom of the front canvas, scrolling fastest of all
+		function drawGrass(){
+			var g = Math.max(0.6, scale);
+			eachProp(1.4, 60, 60, 13, function(x, r1, r2){
+				if (r2 > 0.6) return;
+				var h = (20 + r1 * 36) * g;
+				fctx.fillStyle = r2 < 0.25 ? theme.grass[0] : theme.grass[1];
+				for (var b = -2; b <= 2; b++) {
+					fctx.beginPath();
+					fctx.moveTo(x + (b * 4 - 3) * g, H + 4);
+					fctx.quadraticCurveTo(x + b * 6 * g, H - h * 0.5, x + b * 10 * g, H - h * (1 - Math.abs(b) * 0.2));
+					fctx.lineTo(x + (b * 4 + 3) * g, H + 4);
+					fctx.closePath();
+					fctx.fill();
+				}
+			});
+		}
+
+		function setTheme(name){
+			theme = THEMES[name] || THEMES.dojo;
+			particles = [];
+			for (var i = 0; i < theme.particleCount; i++) particles.push(theme.particle.create(true));
+			shuriken = [];
+			thrown = [];
+			sparks = [];
+			flash = 0;
+			gateShake = 0;
+		}
+
+		// Punch sparks and stealth smoke
+		function drawSparks(dt, camDelta){
+			for (var k = sparks.length - 1; k >= 0; k--) {
+				var sp = sparks[k];
+				sp.life -= dt;
+				if (sp.life <= 0) { sparks.splice(k, 1); continue; }
+				sp.vy += sp.gravity * dt;
+				sp.x += sp.vx * dt - camDelta;
+				sp.y += sp.vy * dt;
+				ctx.globalAlpha = sp.life / sp.max;
+				ctx.fillStyle = sp.color;
+				ctx.save();
+				ctx.translate(sp.x, sp.y);
+				ctx.rotate(Math.atan2(sp.vy, sp.vx));
+				ctx.beginPath();
+				ctx.ellipse(0, 0, sp.size * sp.stretch, sp.size * (sp.stretch > 1 ? 0.6 : 1), 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.restore();
+			}
+			ctx.globalAlpha = 1;
+		}
+
+		// Red flash when a hit lands
+		function drawFlash(dt){
+			if (flash > 0) {
+				ctx.fillStyle = "rgba(255, 40, 40, " + (flash * 0.45) + ")";
+				ctx.fillRect(0, 0, W, H);
+				flash = Math.max(0, flash - dt * 2.5);
+			}
+		}
+
+		function frame(now){
+			var dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
+			last = now;
+			time += dt;
+			var camDelta = cameraX - lastCameraX;
+			lastCameraX = cameraX;
+
+			// Another view (the village map) is drawing instead of the side-scrolling scene
+			if (renderer) {
+				ctx.save();
+				renderer(ctx, W, H, dt, time);
+				drawSparks(dt, 0);
+				ctx.restore();
+				drawFlash(dt);
+				fctx.clearRect(0, 0, W, H);
+				requestAnimationFrame(frame);
+				return;
+			}
+
+			ctx.save();
+			var shakeX = 0, shakeY = 0;
+			if (shake > 0.2) {
+				shakeX = (Math.random() - 0.5) * shake;
+				shakeY = (Math.random() - 0.5) * shake;
+				ctx.translate(shakeX, shakeY);
+				shake *= Math.pow(0.02, dt);
+			}
+
+			// Sky, stars and sun/moon don't scroll: they're too far away
+			var sky = ctx.createLinearGradient(0, 0, 0, horizon);
+			sky.addColorStop(0, theme.sky[0]);
+			sky.addColorStop(0.45, theme.sky[1]);
+			sky.addColorStop(0.78, theme.sky[2]);
+			sky.addColorStop(1, theme.sky[3]);
+			ctx.fillStyle = sky;
+			ctx.fillRect(-20, -20, W + 40, horizon + 40);
+
+			for (var i = 0; i < stars.length; i++) {
+				var st = stars[i];
+				var fade = 1 - st.y / (horizon * 0.5);
+				ctx.globalAlpha = Math.max(0, fade * (0.55 + 0.45 * Math.sin(time * 2 + st.t)));
+				ctx.fillStyle = "#fff6e0";
+				ctx.fillRect(st.x, st.y, st.s, st.s);
+			}
+			ctx.globalAlpha = 1;
+
+			var body = theme.body;
+			var bodyX = W * body.x, bodyY = horizon - H * body.y, R = Math.min(W, H) * body.r;
+			var glow = ctx.createRadialGradient(bodyX, bodyY, R * 0.8, bodyX, bodyY, R * 2.8);
+			glow.addColorStop(0, "rgba(" + body.glow + ", 0.6)");
+			glow.addColorStop(1, "rgba(" + body.glow + ", 0)");
+			ctx.fillStyle = glow;
+			ctx.fillRect(bodyX - R * 3, bodyY - R * 3, R * 6, R * 6);
+			ctx.fillStyle = body.color;
+			ctx.beginPath();
+			ctx.arc(bodyX, bodyY, R, 0, Math.PI * 2);
+			ctx.fill();
+			if (body.craters) {
+				ctx.fillStyle = "rgba(190, 190, 175, 0.35)";
+				[[-0.3, -0.2, 0.22], [0.25, 0.1, 0.16], [-0.05, 0.4, 0.12]].forEach(function(c){
+					ctx.beginPath();
+					ctx.arc(bodyX + c[0] * R, bodyY + c[1] * R, c[2] * R, 0, Math.PI * 2);
+					ctx.fill();
+				});
+			}
+
+			ctx.fillStyle = theme.cloud;
+			for (var c = 0; c < clouds.length; c++) {
+				var cl = clouds[c];
+				cl.x += cl.v * dt;
+				var span = W + cl.w * 2;
+				var cloudX = ((cl.x - cameraX * 0.03) % span + span) % span - cl.w;
+				ctx.beginPath();
+				ctx.ellipse(cloudX, cl.y, cl.w / 2, cl.h / 2, 0, 0, Math.PI * 2);
+				ctx.fill();
+			}
+
+			theme.drawFar();
+
+			var ground = ctx.createLinearGradient(0, horizon, 0, H);
+			ground.addColorStop(0, theme.ground[0]);
+			ground.addColorStop(1, theme.ground[1]);
+			ctx.fillStyle = ground;
+			ctx.fillRect(-20, horizon, W + 40, H - horizon + 20);
+			ctx.fillStyle = theme.horizonLine;
+			ctx.fillRect(-20, horizon, W + 40, 4);
+
+			theme.drawNear();
+			drawPath();
+
+			// The kickable gate stands on the path (the ninja walks through it)
+			var gt = gate();
+			if (gt.x > -gt.h && gt.x < W + gt.h) {
+				ctx.save();
+				ctx.translate(gt.x, gt.base);
+				ctx.rotate(Math.sin(time * 38) * gateShake * 0.03);
+				drawTorii(0, 0, gt.h, theme.gate);
+				ctx.restore();
+			}
+			gateShake = Math.max(0, gateShake - dt * 2);
+
+			// Ninja stars from the gate: fly out, bounce, then glint on the path until picked up
+			var pathY = groundY + 6;
+			var ninjaWorldX = ninja.offsetLeft + 23 + cameraX;
+			var ninjaOnGround = ninja.offsetTop >= Math.round(groundY - 42) - 2;
+			for (var q = shuriken.length - 1; q >= 0; q--) {
+				var sh = shuriken[q];
+				if (!sh.landed) {
+					sh.vy += 900 * dt;
+					sh.x += sh.vx * dt;
+					sh.y += sh.vy * dt;
+					sh.rot += 14 * dt;
+					if (sh.y >= pathY && sh.vy > 0) {
+						sh.y = pathY;
+						if (sh.bounced) sh.landed = true;
+						else { sh.bounced = true; sh.vy *= -0.35; sh.vx *= 0.5; }
+					}
+				} else if (ninjaOnGround && Math.abs(sh.x - ninjaWorldX) < 26) {
+					shuriken.splice(q, 1);
+					for (var z = 0; z < 8; z++) {
+						var za = Math.random() * Math.PI * 2;
+						sparks.push({ x: sh.x - cameraX, y: pathY, vx: Math.cos(za) * 90, vy: Math.sin(za) * 90 - 60, life: 0.5, max: 0.5, size: 2, color: "#fff2a8", gravity: 150, stretch: 1 });
+					}
+					if (collectHandler) collectHandler(sh.kind || "star");
+					continue;
+				}
+				ctx.globalAlpha = sh.landed ? 0.75 + 0.25 * Math.sin(time * 6 + q) : 1;
+				if (sh.kind === "knife") drawKnife(ctx, sh.x - cameraX, sh.y - 2, sh.landed ? 0 : sh.rot);
+				else drawShuriken(ctx, sh.x - cameraX, sh.y, 8, sh.rot);
+				ctx.globalAlpha = 1;
+			}
+
+			// Thrown stars
+			for (var u = thrown.length - 1; u >= 0; u--) {
+				var th = thrown[u];
+				th.x += th.vx * dt;
+				th.rot += 25 * dt;
+				th.life -= dt;
+				var thX = th.x - cameraX;
+				if (th.life <= 0 || thX < -60 || thX > W + 60) { thrown.splice(u, 1); continue; }
+				if (thrownHandler && thrownHandler(thX, th.y, th.kind)) {
+					thrown.splice(u, 1);
+					for (var zz = 0; zz < 10; zz++) {
+						var zza = Math.random() * Math.PI * 2;
+						sparks.push({ x: thX, y: th.y, vx: Math.cos(zza) * 160, vy: Math.sin(zza) * 160 - 40, life: 0.4, max: 0.4, size: 2.5, color: "#ffe9a8", gravity: 300, stretch: 1.6 });
+					}
+					continue;
+				}
+				if (th.kind === "knife") drawKnife(ctx, thX, th.y, th.rot);
+				else drawShuriken(ctx, thX, th.y, 9, th.rot);
+			}
+
+			// Ground shadow under the ninja while it's in the air (shrinks as it rises)
+			if (shadowY !== null) {
+				var lift = shadowY - (ninja.offsetTop + 48);
+				var shrink = Math.max(0.5, 1 - lift / 160);
+				ctx.fillStyle = "rgba(26, 0, 102, " + (0.35 * (parseFloat(ninja.style.opacity) || 1)) + ")";
+				ctx.beginPath();
+				ctx.ellipse(ninja.offsetLeft + 23, shadowY, 16 * shrink, 4 * shrink, 0, 0, Math.PI * 2);
+				ctx.fill();
+			}
+
+			// Petals or fireflies, drifting with the world as it scrolls
+			for (var p = 0; p < particles.length; p++) {
+				if (!theme.particle.update(particles[p], dt, camDelta)) particles[p] = theme.particle.create(false);
+				theme.particle.draw(particles[p]);
+			}
+
+			theme.drawOverhead();
+
+			drawSparks(dt, camDelta);
+
+			ctx.restore();
+
+			drawFlash(dt);
+
+			// Foreground, in front of the ninja
+			fctx.clearRect(0, 0, W, H);
+			fctx.save();
+			fctx.translate(shakeX, shakeY);
+			theme.drawFront();
+			drawGrass();
+			fctx.restore();
+
+			requestAnimationFrame(frame);
+		}
+
+		window.addEventListener("resize", resize);
+		resize();
+		setTheme("dojo");
+		requestAnimationFrame(frame);
+
+		return {
+			// Switches to one of the scenes in THEMES ("dojo" or "forest")
+			setTheme: setTheme,
+			// fn(ctx, width, height, dt, time) draws instead of the side-scrolling scene; null to go back
+			setRenderer: function(fn){
+				renderer = fn;
+			},
+			hit: function(x, y){
+				flash = 1;
+				shake = 8;
+				var colors = ["#ffd23f", "#ff7aa8", "#ffffff"];
+				for (var i = 0; i < 18; i++) {
+					var a = Math.random() * Math.PI * 2;
+					var v = 120 + Math.random() * 220;
+					var life = 0.6 + Math.random() * 0.4;
+					sparks.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, life: life, max: life, size: 2.5 + Math.random() * 2.5, color: colors[i % 3], gravity: 420, stretch: 1.6 });
+				}
+			},
+			// Drifting smoke puff for when the ninja slips into stealth
+			puff: function(x, y){
+				for (var i = 0; i < 16; i++) {
+					var a = Math.random() * Math.PI * 2;
+					var v = 20 + Math.random() * 60;
+					var life = 0.8 + Math.random() * 0.6;
+					sparks.push({ x: x + Math.cos(a) * 8, y: y + Math.sin(a) * 12, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.5 - 30, life: life, max: life, size: 5 + Math.random() * 6, color: "rgba(235, 225, 240, 0.8)", gravity: -20, stretch: 1 });
+				}
+			},
+			// Ground-level y for the ninja's shadow while airborne, or null when landed
+			setShadow: function(y){
+				shadowY = y;
+			},
+			// A kick landed at screen (x, y): if it hit the gate, shake it and knock out ninja stars
+			kick: function(x, y){
+				var g = gate();
+				if (Math.abs(x - g.x) > g.h * 0.7 || y < g.base - g.h || time - lastGateKick < 0.6) return;
+				lastGateKick = time;
+				gateShake = 1;
+				for (var i = 0; i < 3; i++) {
+					shuriken.push({ x: g.x + cameraX + (i - 1) * g.h * 0.2, y: g.base - g.h * 0.9, vx: (i - 1) * 140 + (Math.random() - 0.5) * 120, vy: -420 - Math.random() * 160, rot: Math.random() * 6, bounced: false, landed: false });
+				}
+				while (shuriken.length > 15) shuriken.shift();
+			},
+			// fn(kind) is called whenever the ninja picks up a star ("star") or a knife ("knife")
+			onCollect: function(fn){
+				collectHandler = fn;
+			},
+			// kind: "star" (default) or "knife"
+			throwStar: function(x, y, dir, kind){
+				thrown.push({ x: x + cameraX, y: y, vx: dir * 750, rot: 0, life: 1.6, kind: kind || "star" });
+			},
+			// Drops one collectable item ("star" or "knife") from a screen point
+			dropItem: function(x, y, kind){
+				shuriken.push({ x: x + cameraX, y: y, vx: (Math.random() - 0.5) * 120, vy: -320, rot: 0, bounced: false, landed: false, kind: kind });
+			},
+			// fn(screenX, screenY, kind) is asked about each flying star or knife; return true if it hit something
+			onThrownMove: function(fn){
+				thrownHandler = fn;
+			},
+			// Scatters n collectable ninja stars from a screen point
+			dropStars: function(x, y, n){
+				for (var i = 0; i < n; i++) {
+					shuriken.push({ x: x + cameraX, y: y, vx: (i - (n - 1) / 2) * 90 + (Math.random() - 0.5) * 60, vy: -380 - Math.random() * 160, rot: Math.random() * 6, bounced: false, landed: false });
+				}
+			},
+			camera: function(){
+				return cameraX;
+			},
+			// Keeps the ninja (world x of its center) in the middle of the screen, except on the first
+			// screen, where the camera stays put until the ninja reaches the middle. Returns the camera x.
+			follow: function(centerX){
+				cameraX = Math.max(0, centerX - W / 2);
+				return cameraX;
+			},
+			// Top of the ninja image when its feet are on the path
+			groundTop: function(){
+				return Math.round(groundY - 42);
+			}
+		};
+	})();
+
+	// ---- Village map: a top-down, Zelda-style overworld ----
+	// The map is a grid of tiles laid out in buildMap() (edit it to reshape the village). The ninja
+	// walks in all four directions; walking through the torii gate at the top or along the path
+	// through the bamboo on the right leads into those side-scrolling scenes.
+	var worldMap = (function(){
+		var TILE = 48, COLS = 48, ROWS = 30;
+		// Tiles the ninja can't walk through
+		var BLOCKING = "Tbrws~H";
+		// Where the ninja appears on the map, by the scene it just left (feet position in pixels)
+		var SPAWNS = {
+			dojo: { x: 24 * TILE, y: 4 * TILE },
+			forest: { x: 45 * TILE, y: 16 * TILE },
+			dungeon: { x: 2.5 * TILE, y: 12.5 * TILE },
+			village: { x: 21 * TILE, y: 17.5 * TILE }
+		};
+		var grid = [], houses = [];
+		var camX = 0, camY = 0, offsetX = 0, offsetY = 0;
+		// Room above the map's top edge so the Scene menu doesn't cover the gate
+		var TOP_MARGIN = 70;
+
+		// Repeatable pseudo-random number in [0, 1) for a given number
+		function hash(n){
+			var x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+			return x - Math.floor(x);
+		}
+
+		function fill(x, y, w, h, ch){
+			for (var r = y; r < y + h; r++) {
+				for (var c = x; c < x + w; c++) grid[r][c] = ch;
+			}
+		}
+
+		// Legend: . grass   , flowers   T tree   b bamboo   = dirt path   ~ water   # bridge
+		//         c crops   r rock   w well   s stone lantern   H house
+		//         D gate to the Sunset Dojo   F path to the Moonlit Bamboo Forest   K cave into the Crypt
+		function buildMap(){
+			for (var r = 0; r < ROWS; r++) {
+				grid.push([]);
+				for (var c = 0; c < COLS; c++) grid[r].push(hash(c * 97 + r * 31) < 0.08 ? "," : ".");
+			}
+			// Trees around the edge and in a few clumps
+			fill(0, 0, COLS, 1, "T");
+			fill(0, ROWS - 1, COLS, 1, "T");
+			fill(0, 0, 1, ROWS, "T");
+			fill(COLS - 1, 0, 1, ROWS, "T");
+			fill(1, 1, 3, 2, "T");
+			fill(18, 1, 4, 3, "T");
+			fill(26, 1, 3, 2, "T");
+			fill(1, 26, 2, 3, "T");
+			fill(26, 24, 7, 5, "T");
+			fill(12, 28, 9, 1, "T");
+			fill(37, 3, 2, 3, "T");
+			// A river, with a bamboo grove on the far bank
+			fill(35, 1, 2, ROWS - 2, "~");
+			fill(39, 1, 8, ROWS - 2, "b");
+			// Pond and crop field
+			fill(14, 24, 6, 4, "~");
+			fill(3, 24, 8, 4, "c");
+			// Paths: north-south, east-west (over the bridge and through the grove), the plaza and a southern lane
+			fill(23, 2, 2, ROWS - 4, "=");
+			fill(2, 15, 45, 2, "=");
+			fill(35, 15, 2, 2, "#");
+			fill(18, 11, 11, 8, "=");
+			fill(7, 23, 25, 1, "=");
+			// Houses; each door faces south, onto a path
+			houses = [
+				{ x: 5, y: 4, w: 5, h: 4, roof: "#b5473a" },
+				{ x: 12, y: 4, w: 5, h: 4, roof: "#3f6fa8" },
+				{ x: 29, y: 4, w: 5, h: 4, roof: "#4f8a4a" },
+				{ x: 5, y: 19, w: 5, h: 4, roof: "#8a5a3c" },
+				{ x: 29, y: 19, w: 5, h: 4, roof: "#a8457a" }
+			];
+			houses.forEach(function(house){
+				fill(house.x, house.y, house.w, house.h, "H");
+				// Northern houses get a short path down to the main road
+				if (house.y < 10) fill(house.x + 2, house.y + house.h, 1, 15 - (house.y + house.h), "=");
+			});
+			// Well, lanterns around the plaza, and rocks
+			grid[13][21] = "w";
+			grid[11][18] = grid[11][28] = grid[18][18] = grid[18][28] = "s";
+			grid[10][33] = grid[19][12] = grid[22][37] = grid[21][21] = "r";
+			// The ways out
+			fill(23, 1, 2, 1, "D");
+			fill(COLS - 1, 15, 1, 2, "F");
+			// A cave into the Crypt, among the rocks, with a path down to the main road
+			fill(2, 11, 1, 4, "=");
+			grid[10][2] = "K";
+			grid[10][1] = grid[10][3] = "r";
+		}
+
+		function tileAt(px, py){
+			var c = Math.floor(px / TILE), r = Math.floor(py / TILE);
+			if (c < 0 || r < 0 || c >= COLS || r >= ROWS) return "T";
+			return grid[r][c];
+		}
+
+		// Whether the ninja's feet (a small box around the given point) fit on walkable tiles
+		function canStand(x, y){
+			var corners = [[x - 12, y - 10], [x + 12, y - 10], [x - 12, y - 1], [x + 12, y - 1]];
+			for (var i = 0; i < corners.length; i++) {
+				if (BLOCKING.indexOf(tileAt(corners[i][0], corners[i][1])) >= 0) return false;
+			}
+			return true;
+		}
+
+		function drawGround(ctx, ch, x, y, c, r, time){
+			if (ch === "=" || ch === "D" || ch === "F") {
+				ctx.fillStyle = "#d9bf8c";
+				ctx.fillRect(x, y, TILE, TILE);
+				ctx.fillStyle = "rgba(120, 90, 50, 0.35)";
+				ctx.fillRect(x + hash(c * 7 + r) * 40, y + hash(r * 11 + c) * 40, 3, 3);
+				ctx.fillRect(x + hash(c * 13 + r * 3) * 40, y + hash(r * 5 + c * 9) * 40, 2, 2);
+			} else if (ch === "~" || ch === "#") {
+				ctx.fillStyle = "#4a90c2";
+				ctx.fillRect(x, y, TILE, TILE);
+				ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+				var wobble = Math.sin(time * 2 + c * 0.9 + r * 0.6) * 6;
+				ctx.fillRect(x + 8 + wobble, y + 14, 14, 2);
+				ctx.fillRect(x + 24 - wobble, y + 32, 12, 2);
+				if (ch === "#") {
+					ctx.fillStyle = "#9b6b43";
+					ctx.fillRect(x, y + 2, TILE, TILE - 4);
+					ctx.fillStyle = "rgba(60, 35, 20, 0.45)";
+					for (var p = 0; p < TILE; p += 12) ctx.fillRect(x + p, y + 2, 2, TILE - 4);
+				}
+			} else if (ch === "c") {
+				ctx.fillStyle = "#8a6a44";
+				ctx.fillRect(x, y, TILE, TILE);
+				ctx.fillStyle = "#6fae4f";
+				for (var row = 0; row < 3; row++) {
+					for (var col = 0; col < 4; col++) ctx.fillRect(x + 5 + col * 11, y + 8 + row * 15, 5, 7);
+				}
+			} else {
+				ctx.fillStyle = ch === "b" ? "#5f8f55" : (hash(c * 31 + r * 17) < 0.5 ? "#7fb069" : "#79aa63");
+				ctx.fillRect(x, y, TILE, TILE);
+				if (ch === ",") {
+					ctx.fillStyle = hash(c + r * 3) < 0.5 ? "#f7a8c4" : "#ffe27a";
+					for (var f = 0; f < 3; f++) {
+						ctx.fillRect(x + 8 + hash(c * 5 + r * 7 + f) * 30, y + 8 + hash(c * 3 + r * 11 + f) * 30, 4, 4);
+					}
+				}
+			}
+		}
+
+		function drawLanternTop(ctx, cx, cy){
+			var glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, TILE * 0.7);
+			glow.addColorStop(0, "rgba(255, 200, 110, 0.4)");
+			glow.addColorStop(1, "rgba(255, 200, 110, 0)");
+			ctx.fillStyle = glow;
+			ctx.fillRect(cx - TILE * 0.7, cy - TILE * 0.7, TILE * 1.4, TILE * 1.4);
+			ctx.fillStyle = "#7a7480";
+			ctx.fillRect(cx - 12, cy - 12, 24, 24);
+			ctx.fillStyle = "#5a4e60";
+			ctx.fillRect(cx - 15, cy - 15, 30, 8);
+			ctx.fillStyle = "#ffd27a";
+			ctx.fillRect(cx - 5, cy - 3, 10, 9);
+		}
+
+		function drawObject(ctx, ch, x, y, c, r){
+			var cx = x + TILE / 2, cy = y + TILE / 2;
+			if (ch === "T") {
+				ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+				ctx.beginPath();
+				ctx.ellipse(cx + 4, y + TILE - 6, TILE * 0.42, TILE * 0.18, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "#6b4a3a";
+				ctx.fillRect(cx - 4, cy, 8, TILE / 2 - 4);
+				var cherry = hash(c * 53 + r * 29) < 0.2;
+				ctx.fillStyle = cherry ? "#e98fb4" : "#3f7f4a";
+				ctx.beginPath();
+				ctx.arc(cx, cy - 6, TILE * 0.5, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = cherry ? "#ffc9dd" : "#5a9e5c";
+				ctx.beginPath();
+				ctx.arc(cx - 7, cy - 13, TILE * 0.22, 0, Math.PI * 2);
+				ctx.fill();
+			} else if (ch === "b") {
+				for (var i = 0; i < 4; i++) {
+					var bx = x + 8 + hash(c * 17 + r * 3 + i) * 32, by = y + 8 + hash(c * 7 + r * 19 + i) * 32;
+					ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
+					ctx.beginPath();
+					ctx.arc(bx + 3, by + 4, 7, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.fillStyle = i % 2 ? "#6fae5a" : "#4f8f45";
+					ctx.beginPath();
+					ctx.arc(bx, by, 7, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.fillStyle = "#8cc76e";
+					ctx.fillRect(bx - 1, by - 5, 2, 10);
+				}
+			} else if (ch === "r") {
+				ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+				ctx.beginPath();
+				ctx.ellipse(cx + 3, cy + 10, 16, 7, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "#8d8f95";
+				ctx.beginPath();
+				ctx.ellipse(cx, cy + 4, 16, 12, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "#b3b5bb";
+				ctx.beginPath();
+				ctx.ellipse(cx - 5, cy, 6, 4, 0, 0, Math.PI * 2);
+				ctx.fill();
+			} else if (ch === "w") {
+				ctx.fillStyle = "#9a9ca3";
+				ctx.beginPath();
+				ctx.arc(cx, cy, TILE * 0.44, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "#2d5f8a";
+				ctx.beginPath();
+				ctx.arc(cx, cy, TILE * 0.26, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+				ctx.beginPath();
+				ctx.arc(cx - 4, cy - 4, TILE * 0.08, 0, Math.PI * 2);
+				ctx.fill();
+			} else if (ch === "s") {
+				drawLanternTop(ctx, cx, cy);
+			} else if (ch === "D" && c === 23) {
+				// Red torii over the path north, the way to the Sunset Dojo
+				var gx = x + TILE, h = TILE * 1.6, base = y + TILE;
+				ctx.fillStyle = "#c7362f";
+				ctx.fillRect(gx - TILE * 0.85, base - h * 0.9, 8, h * 0.9);
+				ctx.fillRect(gx + TILE * 0.85 - 8, base - h * 0.9, 8, h * 0.9);
+				ctx.fillRect(gx - TILE, base - h * 0.72, TILE * 2, 7);
+				ctx.fillStyle = "#2a1a22";
+				ctx.fillRect(gx - TILE * 1.15, base - h, TILE * 2.3, 9);
+			} else if (ch === "K") {
+				// The mouth of the Crypt, dug into a rocky mound
+				ctx.fillStyle = "#6f6a72";
+				ctx.beginPath();
+				ctx.ellipse(cx, y + TILE * 0.8, TILE * 0.75, TILE * 0.62, 0, Math.PI, 0);
+				ctx.fill();
+				ctx.fillStyle = "#0a070d";
+				ctx.beginPath();
+				ctx.moveTo(cx - 14, y + TILE);
+				ctx.lineTo(cx - 14, cy + 4);
+				ctx.arc(cx, cy + 4, 14, Math.PI, 0);
+				ctx.lineTo(cx + 14, y + TILE);
+				ctx.closePath();
+				ctx.fill();
+			} else if (ch === "F" && r === 15) {
+				// Lanterns either side of the path out to the bamboo forest
+				drawLanternTop(ctx, cx, y - 14);
+				drawLanternTop(ctx, cx, y + TILE * 2 + 14);
+			}
+		}
+
+		function drawHouse(ctx, house, ox, oy){
+			var x = ox + house.x * TILE, y = oy + house.y * TILE, w = house.w * TILE, h = house.h * TILE;
+			var wallH = h * 0.38, roofH = h - wallH;
+			ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+			ctx.fillRect(x + 6, y + 10, w, h);
+			// Front wall with a door and windows
+			ctx.fillStyle = "#e8d9b8";
+			ctx.fillRect(x, y + roofH, w, wallH);
+			ctx.fillStyle = "#6b4a3a";
+			ctx.fillRect(x + w / 2 - TILE * 0.3, y + roofH + wallH * 0.2, TILE * 0.6, wallH * 0.8);
+			ctx.fillStyle = "#8fc3e0";
+			ctx.fillRect(x + TILE * 0.5, y + roofH + wallH * 0.25, TILE * 0.6, TILE * 0.45);
+			ctx.fillRect(x + w - TILE * 1.1, y + roofH + wallH * 0.25, TILE * 0.6, TILE * 0.45);
+			// Roof, with a ridge and rows of tiles
+			ctx.fillStyle = house.roof;
+			ctx.fillRect(x - 6, y, w + 12, roofH + 4);
+			ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+			for (var ry = y + 8; ry < y + roofH; ry += 10) ctx.fillRect(x - 6, ry, w + 12, 2);
+			ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+			ctx.fillRect(x - 6, y + roofH / 2 - 2, w + 12, 4);
+		}
+
+		function label(ctx, text, x, y){
+			ctx.font = "bold 14px 'Segoe UI', system-ui, sans-serif";
+			ctx.textAlign = "center";
+			ctx.textBaseline = "middle";
+			var width = ctx.measureText(text).width;
+			ctx.fillStyle = "rgba(43, 27, 74, 0.75)";
+			ctx.fillRect(x - width / 2 - 8, y - 11, width + 16, 22);
+			ctx.fillStyle = "#ffe8c2";
+			ctx.fillText(text, x, y);
+		}
+
+		function render(ctx, w, h, dt, time){
+			ctx.fillStyle = "#2f5a34";
+			ctx.fillRect(0, 0, w, h);
+			var ox = Math.round(offsetX - camX), oy = Math.round(offsetY - camY);
+			// Only the tiles on screen
+			var c0 = Math.max(0, Math.floor(-ox / TILE) - 1), c1 = Math.min(COLS - 1, Math.floor((w - ox) / TILE) + 1);
+			var r0 = Math.max(0, Math.floor(-oy / TILE) - 1), r1 = Math.min(ROWS - 1, Math.floor((h - oy) / TILE) + 1);
+			var r, c;
+			for (r = r0; r <= r1; r++) {
+				for (c = c0; c <= c1; c++) drawGround(ctx, grid[r][c], ox + c * TILE, oy + r * TILE, c, r, time);
+			}
+			houses.forEach(function(house){ drawHouse(ctx, house, ox, oy); });
+			for (r = r0; r <= r1; r++) {
+				for (c = c0; c <= c1; c++) drawObject(ctx, grid[r][c], ox + c * TILE, oy + r * TILE, c, r);
+			}
+			label(ctx, "▲ Sunset Dojo", ox + 27 * TILE, oy + 3.4 * TILE);
+			label(ctx, "Bamboo Forest ▶", ox + 43.5 * TILE, oy + 14 * TILE);
+			label(ctx, "The Crypt", ox + 2.5 * TILE, oy + 9.1 * TILE);
+		}
+
+		buildMap();
+
+		return {
+			// Draws the map; used as the scene's renderer while the map is showing
+			render: render,
+			// Where to put the ninja when arriving from a scene ("dojo", "forest") or anywhere else
+			spawn: function(fromScene){
+				var p = SPAWNS[fromScene] || SPAWNS.village;
+				return { x: p.x, y: p.y };
+			},
+			// Moves a feet position by dx, dy, sliding along anything in the way
+			move: function(pos, dx, dy){
+				if (dx && canStand(pos.x + dx, pos.y)) pos.x += dx;
+				if (dy && canStand(pos.x, pos.y + dy)) pos.y += dy;
+			},
+			// The scene a position leads into ("dojo" or "forest"), or null
+			portalAt: function(pos){
+				var ch = tileAt(pos.x, pos.y - 5);
+				return ch === "D" ? "dojo" : ch === "F" ? "forest" : ch === "K" ? "dungeon" : null;
+			},
+			// Centers the view on a map position (clamped to the map's edges) and returns its screen position
+			follow: function(pos, w, h){
+				var worldW = COLS * TILE, worldH = ROWS * TILE;
+				if (worldW <= w) { camX = 0; offsetX = (w - worldW) / 2; }
+				else { offsetX = 0; camX = Math.max(0, Math.min(worldW - w, pos.x - w / 2)); }
+				if (worldH <= h) { camY = 0; offsetY = (h - worldH) / 2; }
+				else { offsetY = 0; camY = Math.max(-TOP_MARGIN, Math.min(worldH - h, pos.y - 25 - h / 2)); }
+				return { x: pos.x - camX + offsetX, y: pos.y - camY + offsetY };
+			}
+		};
+	})();
+
+	// NES-style chiptune music built with the Web Audio API (no audio files needed).
+	// Channels mimic the old Nintendo sound chip: pulse waves for the melody and its echo, a
+	// triangle bass and noise drums. Each scene has its own song in SONGS; setSong switches.
+	var music = (function(){
+		var VOLUME = 0.12;
+		var _ = null;
+
+		var ctx = null, master = null, noiseBuf = null, waves = {};
+		var on = true, started = false, step = 0, nextTime = 0;
+
+		function mtof(m){ return 440 * Math.pow(2, (m - 69) / 12); }
+
+		// Pulse wave with the given duty cycle, like the NES square channels
+		function pulseWave(duty){
+			var n = 32, real = new Float32Array(n), imag = new Float32Array(n);
+			for (var k = 1; k < n; k++) real[k] = 2 * Math.sin(k * Math.PI * duty) / (k * Math.PI);
+			return ctx.createPeriodicWave(real, imag);
+		}
+
+		function init(){
+			var AC = window.AudioContext || window.webkitAudioContext;
+			if (!AC) return false;
+			ctx = new AC();
+			master = ctx.createGain();
+			master.gain.value = VOLUME;
+			master.connect(ctx.destination);
+			noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.5), ctx.sampleRate);
+			var data = noiseBuf.getChannelData(0);
+			for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+			waves.lead = pulseWave(0.25);
+			waves.echo = pulseWave(0.125);
+			waves.flute = pulseWave(0.5);
+			return true;
+		}
+
+		function tone(wave, freq, t, dur, vol, cutoff){
+			var o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+			if (typeof wave === "string") o.type = wave;
+			else o.setPeriodicWave(wave);
+			o.frequency.value = freq;
+			f.type = "lowpass";
+			f.frequency.value = cutoff;
+			g.gain.setValueAtTime(0.0001, t);
+			g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
+			g.gain.setValueAtTime(vol, t + dur * 0.6);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+			o.connect(f); f.connect(g); g.connect(master);
+			// Long notes get that wobbly Simon's Quest vibrato
+			if (dur > song.step * 2.5) {
+				var lfo = ctx.createOscillator(), depth = ctx.createGain();
+				lfo.frequency.value = 6;
+				depth.gain.setValueAtTime(0, t);
+				depth.gain.linearRampToValueAtTime(freq * 0.015, t + 0.18);
+				lfo.connect(depth); depth.connect(o.frequency);
+				lfo.start(t);
+				lfo.stop(t + dur + 0.02);
+			}
+			o.start(t);
+			o.stop(t + dur + 0.02);
+		}
+
+		function noise(t, dur, vol, type, freq){
+			var src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+			src.buffer = noiseBuf;
+			f.type = type;
+			f.frequency.value = freq;
+			g.gain.setValueAtTime(vol, t);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+			src.connect(f); f.connect(g); g.connect(master);
+			src.start(t);
+			src.stop(t + dur + 0.02);
+		}
+
+		function kick(t){
+			var o = ctx.createOscillator(), g = ctx.createGain();
+			o.frequency.setValueAtTime(150, t);
+			o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+			g.gain.setValueAtTime(0.8, t);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+			o.connect(g); g.connect(master);
+			o.start(t);
+			o.stop(t + 0.17);
+		}
+
+		// Deep, slow drum hit, like a taiko
+		function tom(t){
+			var o = ctx.createOscillator(), g = ctx.createGain();
+			o.type = "sine";
+			o.frequency.setValueAtTime(130, t);
+			o.frequency.exponentialRampToValueAtTime(55, t + 0.25);
+			g.gain.setValueAtTime(0.7, t);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+			o.connect(g); g.connect(master);
+			o.start(t);
+			o.stop(t + 0.37);
+		}
+
+		// How long a melody note rings: until the next note, up to maxSteps
+		function noteLength(melody, s, maxSteps){
+			var len = 1;
+			while (len < maxSteps && melody[(s + len) % melody.length] === null) len++;
+			return len * song.step * 0.92;
+		}
+
+		var SONGS = {
+			// Sunset Dojo: upbeat, Contra/Zelda-style drive in the Japanese "in" scale (D, Eb, G, A, Bb)
+			dojo: {
+				bpm: 150,
+				melody: [
+					// Section A
+					74,_,70,69, 67,_,69,70, 74,_,75,74, 70,_,69,_,
+					67,_,69,70, 69,67,63,_, 62,_,63,67, 69,_,_,_,
+					74,_,70,69, 67,_,69,70, 75,_,79,75, 74,_,70,_,
+					69,70,69,67, 63,_,67,_, 62,_,_,_, 62,_,_,_,
+					// Section B
+					81,_,79,_, 75,_,74,_, 79,_,75,74, 70,_,_,_,
+					74,75,74,70, 69,_,67,_, 69,70,74,75, 79,_,_,_,
+					81,_,82,81, 79,_,75,_, 74,75,79,_, 75,74,70,_,
+					69,_,70,_, 74,_,69,_, 62,_,_,_, 62,63,67,69
+				],
+				bassRoots: [38, 31, 39, 33, 39, 38, 31, 33],
+				play: function(s, t){
+					var m = this.melody, len = m.length;
+					var bar = Math.floor(s / 16) % 8, i = s % 16, note = m[s % len];
+					var sectionB = bar >= 4;
+
+					// Pulse 1: lead melody
+					if (note !== null) tone(waves.lead, mtof(note), t, noteLength(m, s % len, 4), 0.3, 6000);
+					// Pulse 2: the classic NES "echo" of the melody, a dotted eighth behind
+					var echoNote = m[(s - 3 + len) % len];
+					if (echoNote !== null && s >= 3) tone(waves.echo, mtof(echoNote), t, this.step * 1.4, 0.1, 4000);
+					// Triangle: bouncing octave bass on eighth notes
+					if (i % 2 === 0) tone("triangle", mtof(this.bassRoots[bar] + (i % 4 === 2 ? 12 : 0)), t, this.step * 1.7, 0.75, 8000);
+					// Noise channel drums
+					if (i === 0 || i === 8 || (sectionB && i === 10)) kick(t);
+					if (i === 4 || i === 12) noise(t, 0.13, 0.55, "bandpass", 1800);
+					if (i % 2 === 0) noise(t, 0.03, 0.16, "highpass", 7000);
+					if (sectionB && i === 15) noise(t, 0.06, 0.35, "bandpass", 2600);
+				}
+			},
+
+			// Moonlit Bamboo Forest: calm and mysterious, hirajoshi scale (D, E, F, A, Bb),
+			// a breathy flute-like lead, long bass notes and slow taiko-style drums
+			forest: {
+				bpm: 96,
+				melody: [
+					// Section A
+					74,_,_,_, 70,_,69,_, 65,_,_,_, 69,_,_,_,
+					70,_,69,_, 65,_,64,_, 62,_,_,_, _,_,_,_,
+					77,_,_,_, 76,_,74,_, 70,_,_,_, 74,_,76,_,
+					77,_,76,_, 74,_,70,_, 69,_,_,_, _,_,_,_,
+					// Section B
+					81,_,_,_, 82,_,81,_, 77,_,_,_, 76,_,_,_,
+					74,_,76,_, 77,_,74,_, 70,_,_,_, 69,_,_,_,
+					65,_,69,_, 70,_,74,_, 76,_,_,_, 77,_,76,_,
+					74,_,_,_, _,_,_,_, 62,_,_,_, _,_,_,_
+				],
+				bassRoots: [38, 34, 41, 33, 38, 34, 41, 38],
+				play: function(s, t){
+					var m = this.melody, len = m.length;
+					var bar = Math.floor(s / 16) % 8, i = s % 16, note = m[s % len];
+
+					// Flute-like lead
+					if (note !== null) tone(waves.flute, mtof(note), t, noteLength(m, s % len, 8), 0.28, 1800);
+					// A faint, high echo trailing well behind
+					var echoNote = m[(s - 6 + len) % len];
+					if (echoNote !== null && s >= 6) tone(waves.echo, mtof(echoNote + 12), t, this.step * 2, 0.05, 3000);
+					// Long bass notes: the root, then the fifth
+					if (i === 0) tone("triangle", mtof(this.bassRoots[bar]), t, this.step * 7.5, 0.6, 6000);
+					if (i === 8) tone("triangle", mtof(this.bassRoots[bar] + 7), t, this.step * 7.5, 0.5, 6000);
+					// Taiko-style drums and soft ticks
+					if (i === 0 || i === 11) tom(t);
+					if (i === 4 || i === 12) noise(t, 0.03, 0.07, "highpass", 8000);
+					if (bar >= 4 && i === 14) noise(t, 0.04, 0.12, "bandpass", 3000);
+				}
+			},
+
+			// Village map: cheerful and bouncy, Japanese "yo" scale (D, E, G, A, B)
+			village: {
+				bpm: 120,
+				melody: [
+					74,_,71,_, 69,_,71,74, 76,_,74,_, 71,_,69,_,
+					67,_,69,_, 71,_,69,67, 64,_,67,_, 69,_,_,_,
+					74,_,71,_, 69,_,71,74, 79,_,76,_, 74,_,71,_,
+					69,_,71,_, 67,_,64,_, 62,_,_,_, _,_,_,_
+				],
+				bassRoots: [38, 43, 40, 45],
+				play: function(s, t){
+					var m = this.melody, len = m.length;
+					var bar = Math.floor(s / 16) % 4, i = s % 16, note = m[s % len];
+
+					if (note !== null) tone(waves.lead, mtof(note), t, noteLength(m, s % len, 4), 0.26, 5000);
+					// A soft echo an octave down
+					var echoNote = m[(s - 2 + len) % len];
+					if (echoNote !== null && s >= 2) tone(waves.echo, mtof(echoNote - 12), t, this.step * 1.2, 0.07, 3000);
+					// "Oom-pah" bass: the root on the beat, the fifth in between
+					if (i % 4 === 0) tone("triangle", mtof(this.bassRoots[bar]), t, this.step * 1.8, 0.7, 8000);
+					if (i % 4 === 2) tone("triangle", mtof(this.bassRoots[bar] + 7), t, this.step * 1.5, 0.5, 8000);
+					if (i === 0 || i === 8) kick(t);
+					if (i === 4 || i === 12) noise(t, 0.08, 0.3, "bandpass", 2200);
+					if (i % 2 === 1) noise(t, 0.02, 0.08, "highpass", 8000);
+				}
+			},
+
+			// Boss battle: fast and menacing, D minor with a sharp seventh and a galloping bass
+			boss: {
+				bpm: 168,
+				melody: [
+					74,_,74,73, 74,_,_,70, 69,_,70,_, 73,_,74,_,
+					77,_,75,74, 73,_,70,_, 69,_,_,_, 70,69,67,65,
+					74,_,74,73, 74,_,_,70, 69,_,70,_, 73,_,77,_,
+					81,_,77,_, 75,_,74,_, 73,74,73,70, 69,_,_,_
+				],
+				bassRoots: [38, 34, 38, 33],
+				play: function(s, t){
+					var m = this.melody, len = m.length;
+					var bar = Math.floor(s / 16) % 4, i = s % 16, note = m[s % len];
+
+					if (note !== null) tone(waves.lead, mtof(note), t, noteLength(m, s % len, 3), 0.3, 7000);
+					var echoNote = m[(s - 2 + len) % len];
+					if (echoNote !== null && s >= 2) tone(waves.echo, mtof(echoNote - 12), t, this.step * 1.2, 0.08, 4000);
+					// Galloping bass on every sixteenth: root, root, octave, root
+					tone("triangle", mtof(this.bassRoots[bar] + [0, 0, 12, 0][i % 4]), t, this.step * 0.9, 0.75, 8000);
+					if (i === 0 || i === 6 || i === 8 || i === 14) kick(t);
+					if (i === 4 || i === 12) noise(t, 0.12, 0.6, "bandpass", 1900);
+					noise(t, 0.025, i % 2 ? 0.08 : 0.14, "highpass", 8000);
+					if (i === 0 && bar === 0) noise(t, 0.5, 0.3, "highpass", 5000);
+				}
+			},
+
+			// The Crypt: slow and brooding, a low drone, an ominous flute and war drums
+			dungeon: {
+				bpm: 76,
+				melody: [
+					62,_,_,_, _,_,_,_, 63,_,_,_, 62,_,_,_,
+					_,_,_,_, 58,_,_,_, 60,_,61,_, 62,_,_,_,
+					65,_,_,_, 63,_,62,_, 61,_,_,_, 62,_,_,_,
+					_,_,_,_, _,_,_,_, 58,_,_,_, 57,_,_,_
+				],
+				bassRoots: [26, 26, 27, 25],
+				play: function(s, t){
+					var m = this.melody, len = m.length;
+					var bar = Math.floor(s / 16) % 4, i = s % 16, note = m[s % len];
+
+					if (note !== null) tone(waves.flute, mtof(note - 12), t, noteLength(m, s % len, 8), 0.22, 1200);
+					// A long low drone each bar, with its fifth
+					if (i === 0) {
+						tone("triangle", mtof(this.bassRoots[bar] + 12), t, this.step * 15, 0.7, 3000);
+						tone("triangle", mtof(this.bassRoots[bar] + 19), t, this.step * 15, 0.3, 3000);
+					}
+					// War drums: a heavy boom, then a pounding answer, with a rumbling roll
+					if (i === 0) kick(t);
+					if (i === 0 || i === 6 || i === 10) tom(t);
+					if (i === 12 || i === 14) noise(t, 0.08, 0.25, "lowpass", 400);
+					// Now and then a gong-like wash
+					if (bar === 3 && i === 8) noise(t, 1.6, 0.25, "bandpass", 700);
+				}
+			}
+		};
+		for (var name in SONGS) SONGS[name].step = 60 / SONGS[name].bpm / 4;
+		var song = SONGS.dojo;
+
+		function schedule(){
+			if (!on) return;
+			if (nextTime < ctx.currentTime - 0.2) nextTime = ctx.currentTime + 0.05;
+			while (nextTime < ctx.currentTime + 0.12) {
+				song.play(step, nextTime);
+				nextTime += song.step;
+				step++;
+			}
+		}
+
+		// Browsers only allow audio after a key press or click, so this runs on the first one
+		function start(){
+			if (!ctx) return;
+			if (ctx.state === "suspended") ctx.resume();
+			if (on && !started) {
+				started = true;
+				nextTime = ctx.currentTime + 0.05;
+				setInterval(schedule, 25);
+			}
+		}
+
+		document.addEventListener("visibilitychange", function(){
+			if (!ctx) return;
+			if (document.hidden) ctx.suspend();
+			else ctx.resume();
+		});
+
+		init();
+
+		return {
+			start: start,
+			context: function(){ return ctx; },
+			// Switches to one of the songs in SONGS ("dojo", "forest" or "village"), starting it from the top
+			setSong: function(name){
+				var next = SONGS[name];
+				if (!next || next === song) return;
+				song = next;
+				step = 0;
+				if (ctx) nextTime = ctx.currentTime + 0.1;
+			},
+			toggle: function(){
+				on = !on;
+				if (ctx) {
+					master.gain.cancelScheduledValues(ctx.currentTime);
+					master.gain.setTargetAtTime(on ? VOLUME : 0, ctx.currentTime, 0.02);
+				}
+				if (on) start();
+				return on;
+			},
+			// A short victory fanfare
+			jingle: function(){
+				if (!ctx) return;
+				var t = ctx.currentTime + 0.05;
+				[67, 71, 74, 79].forEach(function(note, i){ tone(waves.lead, mtof(note), t + i * 0.1, 0.12, 0.35, 6000); });
+				tone(waves.lead, mtof(83), t + 0.4, 0.6, 0.35, 6000);
+			},
+			// Briefly turn the music down so the sound effects come through clearly
+			duck: function(seconds, level){
+				if (!ctx || !on) return;
+				var g = master.gain, now = ctx.currentTime;
+				g.cancelScheduledValues(now);
+				g.setValueAtTime(g.value, now);
+				g.linearRampToValueAtTime(VOLUME * level, now + 0.03);
+				g.setValueAtTime(VOLUME * level, now + seconds);
+				g.linearRampToValueAtTime(VOLUME, now + seconds + 0.25);
+			}
+		};
+	})();
+
+	// Sound effects: the original voice recordings, decoded up front with the Web Audio API
+	// so they fire the instant a key is pressed. Falls back to <audio> if decoding isn't possible.
+	var sfx = (function(){
+		var ctx = music.context();
+		var buffers = {}, offsets = {}, fallback = {}, playing = {};
+
+		// Skip the quiet lead-in at the start of a recording: find the first 10ms window
+		// with real sound, then back up 40ms so the start of the voice isn't clipped
+		function firstSound(buf){
+			var data = buf.getChannelData(0), win = Math.floor(buf.sampleRate * 0.01);
+			for (var i = 0; i + win <= data.length; i += win) {
+				var sum = 0;
+				for (var j = i; j < i + win; j++) sum += data[j] * data[j];
+				if (Math.sqrt(sum / win) > 0.03) return Math.max(0, i / buf.sampleRate - 0.04);
+			}
+			return 0;
+		}
+
+		function load(name, url){
+			fallback[name] = new Audio(url);
+			if (!ctx || !window.fetch) return;
+			fetch(url)
+				.then(function(r){ if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+				.then(function(data){ return new Promise(function(res, rej){ ctx.decodeAudioData(data, res, rej); }); })
+				.then(function(buf){ offsets[name] = firstSound(buf); buffers[name] = buf; })
+				.catch(function(){});
+		}
+
+		// volume: 1 = as recorded. duckLevel: how far to turn the music down meanwhile (1 = not at all)
+		function play(name, duckSeconds, duckLevel, volume){
+			if (volume === undefined) volume = 1;
+			if (duckLevel < 1) music.duck(duckSeconds, duckLevel);
+			if (ctx && buffers[name]) {
+				if (ctx.state === "suspended") ctx.resume();
+				// Restart the clip rather than stacking copies of it
+				if (playing[name]) { try { playing[name].stop(); } catch (e) {} }
+				var src = ctx.createBufferSource(), gain = ctx.createGain();
+				src.buffer = buffers[name];
+				gain.gain.value = volume;
+				src.connect(gain);
+				gain.connect(ctx.destination);
+				src.start(0, offsets[name]);
+				playing[name] = src;
+			} else if (fallback[name]) {
+				var a = fallback[name];
+				a.volume = volume;
+				a.currentTime = 0;
+				var p = a.play();
+				if (p && p.catch) p.catch(function(){});
+			}
+		}
+
+		// Quick NES-style pitch sweep: jump "boing", star pickup chime, throw whoosh
+		function blip(from, to, duration){
+			if (!ctx) return;
+			if (ctx.state === "suspended") ctx.resume();
+			var t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+			o.type = "square";
+			o.frequency.setValueAtTime(from, t);
+			o.frequency.exponentialRampToValueAtTime(to, t + duration * 0.8);
+			g.gain.setValueAtTime(0.08, t);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+			o.connect(g); g.connect(ctx.destination);
+			o.start(t);
+			o.stop(t + duration + 0.02);
+		}
+
+		function jump(){
+			blip(220, 880, 0.2);
+		}
+
+		return { load: load, play: play, jump: jump, blip: blip };
+	})();
+
+	document.addEventListener("keydown", function(){ music.start(); });
+	document.getElementById("musicBtn").addEventListener("click", function(){
+		var isOn = music.toggle();
+		this.innerHTML = "&#9835; Music: " + (isOn ? "On" : "Off");
+		this.blur();
+	});
+</script>
+
+<script>
+
+	var root = 'Resources/Audio/';
+	sfx.load('punch', root + 'punch.Wav');
+	sfx.load('stepLeft', root + 'StepLeft.Wav');
+	sfx.load('stepRight', root + 'StepRight.Wav');
+	var audioPunch = { play: function(){ sfx.play('punch', 0.5, 0.3); } };
+	// Footsteps (a crinkling chip bag) only play while running, at 10% volume so they sit well under the music
+	var audioStepLeft = { play: function(){ sfx.play('stepLeft', 0, 1, 0.1); } };
+	var audioStepRight = { play: function(){ sfx.play('stepRight', 0, 1, 0.1); } };
+
+	var ninjaImg = document.getElementById("ninja");
+	var powImg = document.getElementById("pow");
+	ninjaImg.style.position = "absolute";
+	powImg.style.position = "relative";
+	// The ninja's position along the scrolling world; its screen position comes from the camera
+	var worldX = Math.round(window.innerWidth * 0.3);
+	ninjaImg.style.top = scene.groundTop() + 'px';
+	placeNinja();
+	var requiredRestInterval = new Date().getTime();
+
+	document.addEventListener("keypress",function(e){
+		var restInterval = new Date().getTime();
+		if(requiredRestInterval+1000<restInterval && (e.keyCode < 37 || e.keyCode > 40)){
+			restInterval = new Date().getTime();
+			requiredRestInterval = restInterval;
+			attack();
+		}
+	  },false);
+
+	document.onkeydown = move;
+
+
+
+
+	function punch(){
+
+		powImg.style.backgroundPosition = '-175px 0px';
+		ninjaImg.style.backgroundPosition = '-40px 0px';
+
+		powImg.style.top = (ninjaImg.offsetTop-10).toString() + 'px';
+		powImg.style.zIndex=-1;
+		  var result = window.getComputedStyle(ninjaImg).transform;
+		  var offset = 15;
+		  if(result[7] == "-")
+		  {
+			offset = offset * -3;
+		  }
+		  powImg.style.left = (ninjaImg.offsetLeft + offset).toString() + 'px';
+		var powBox = powImg.getBoundingClientRect();
+		scene.hit(powBox.left + powBox.width / 2, powBox.top + powBox.height / 2);
+		hitEnemiesAt(powBox.left + powBox.width / 2, powBox.top + powBox.height / 2, 1);
+
+		audioPunch.play();
+	}
+
+	function stepLeft(){
+	  ninjaImg.style.backgroundPosition = '0px 0px';
+	}
+	function stepRight(){
+		ninjaImg.style.backgroundPosition = '-126px 0px';
+	}
+
+	function standNeutral(){
+		ninjaImg.style.backgroundPosition = '-85px 0px';
+		powImg.style.backgroundPosition = '-230px 0px';
+	}
+
+
+
+	function attack() {
+		// Counts as a move, so the ninja can't jump or kick mid-punch
+		if (!startMove()) return;
+		setTimeout(punch,100);
+		setTimeout(finishMove,600);
+	}
+
+	// ---- Special moves: jumps, kicks and mid-air attacks ----
+	// The poses live in Resources/Images/Ninja_Moves.png: 64x50 cells, all facing right.
+	// While a move plays, the regular ninja image is hidden and #moves shows the pose.
+	var movesImg = document.getElementById("moves");
+	var POSES = { crouch: 0, tuck: 1, sideChamber: 2, sideKick: 3, roundChamber: 4, roundKick: 5, flyingKick: 6, airRoundKick: 7, airPunch: 8, knifeThrust: 9 };
+	var POSE_W = 64, NINJA_W = 46;
+	var moveBusy = false, airborne = false, airAttacked = false;
+	var MOVE_KEYS = { " ": jump, "k": sideKick, "r": roundhouse, "f": flyingKick, "t": throwStar, "q": throwKnife, "e": knifeThrust };
+
+	// One attack per jump; x, y is where the hit lands on the pose (facing right)
+	var AIR_ATTACKS = {
+		kick: { pose: "flyingKick", x: 44, y: 40, kick: true },
+		roundhouse: { pose: "airRoundKick", x: 39, y: 10, kick: true },
+		punch: { pose: "airPunch", x: 40, y: 21 }
+	};
+
+	function facingLeft(){
+		return window.getComputedStyle(ninjaImg).transform.charAt(7) == "-";
+	}
+
+	function showPose(name){
+		movesImg.style.backgroundPosition = (-POSES[name] * POSE_W) + "px 0px";
+		movesImg.style.display = "block";
+		ninjaImg.style.visibility = "hidden";
+		placePose();
+	}
+
+	// Keep the pose lined up with the (hidden) ninja, mirrored when facing left
+	function placePose(){
+		var left = facingLeft();
+		movesImg.style.left = (ninjaImg.offsetLeft - (left ? POSE_W - NINJA_W : 0)) + "px";
+		movesImg.style.top = ninjaImg.offsetTop + "px";
+		movesImg.style.transform = left ? "scaleX(-1)" : "none";
+	}
+
+	// Moves (including punches) don't overlap: a new one can't start until this one finishes
+	function startMove(){
+		if (moveBusy) return false;
+		moveBusy = true;
+		(function follow(){
+			if (!moveBusy) return;
+			placePose();
+			requestAnimationFrame(follow);
+		})();
+		return true;
+	}
+
+	function finishMove(){
+		moveBusy = false;
+		movesImg.style.display = "none";
+		ninjaImg.style.visibility = "visible";
+		standNeutral();
+	}
+
+	// Land a hit at a spot on the current pose (x, y in pose-cell pixels, facing right)
+	function strike(x, y, isKick, damage){
+		placePose();
+		var box = movesImg.getBoundingClientRect();
+		var hitX = facingLeft() ? box.right - x : box.left + x;
+		var hitY = box.top + y;
+		powImg.style.backgroundPosition = '-175px 0px';
+		powImg.style.zIndex = -1;
+		var powBox = powImg.getBoundingClientRect();
+		powImg.style.left = ((parseFloat(powImg.style.left) || 0) + hitX - powBox.width / 2 - powBox.left) + 'px';
+		powImg.style.top = ((parseFloat(powImg.style.top) || 0) + hitY - powBox.height / 2 - powBox.top) + 'px';
+		scene.hit(hitX, hitY);
+		if (isKick && !mapMode) scene.kick(hitX, hitY);
+		hitEnemiesAt(hitX, hitY, damage || 1);
+		audioPunch.play();
+	}
+
+	function hidePow(){
+		powImg.style.backgroundPosition = '-230px 0px';
+	}
+
+	// Runs [delay in ms, step] pairs one after another
+	function sequence(steps){
+		var i = 0;
+		(function next(){
+			if (i >= steps.length) return;
+			var s = steps[i++];
+			setTimeout(function(){ s[1](); next(); }, s[0]);
+		})();
+	}
+
+	// Carries the ninja up and back down, optionally travelling forward
+	function leap(duration, height, forward, kickAt, onLand){
+		var groundTop = ninjaImg.offsetTop;
+		var dir = facingLeft() ? -1 : 1;
+		var start = performance.now(), travelled = 0, kicked = false;
+		airborne = true;
+		// A flying kick reserves the jump's one attack so another key can't use it up
+		airAttacked = kickAt !== null;
+		scene.setShadow(groundTop + 48);
+		(function tick(now){
+			// Frame timestamps can be a few ms older than `start`, so keep t from going negative
+			var t = Math.max(0, Math.min(1, (now - start) / duration));
+			ninjaImg.style.top = Math.round(groundTop - height * 4 * t * (1 - t)) + "px";
+			var travel = Math.round(dir * forward * t);
+			moveNinjaBy(travel - travelled);
+			travelled = travel;
+			if (kickAt !== null && !kicked && t >= kickAt) {
+				kicked = true;
+				performAirAttack("kick");
+			}
+			if (t < 1) {
+				requestAnimationFrame(tick);
+			} else {
+				ninjaImg.style.top = groundTop + "px";
+				airborne = false;
+				scene.setShadow(null);
+				onLand();
+			}
+		})(start);
+	}
+
+	function airAttack(kind){
+		if (airAttacked) return;
+		airAttacked = true;
+		performAirAttack(kind);
+	}
+
+	function performAirAttack(kind){
+		var attack = AIR_ATTACKS[kind];
+		showPose(attack.pose);
+		strike(attack.x, attack.y, attack.kick);
+	}
+
+	function land(){
+		hidePow();
+		showPose("crouch");
+		setTimeout(finishMove, 100);
+	}
+
+	// Turns to face Left or Right if one is held; returns -1, 0 or 1
+	function faceHeldDirection(){
+		var dx = (heldArrows[39] ? 1 : 0) - (heldArrows[37] ? 1 : 0);
+		if (dx) ninjaImg.style.transform = dx < 0 ? "scaleX(-1)" : "scaleX(1)";
+		return dx;
+	}
+
+	// Straight up, or sideways when Left/Right is held (further when running)
+	function jump(){
+		if (!startMove()) return;
+		showPose("crouch");
+		setTimeout(function(){
+			var dx = faceHeldDirection();
+			showPose("tuck");
+			sfx.jump();
+			leap(dx ? 650 : 560, 80, dx ? (running ? 170 : 110) : 0, null, land);
+		}, 70);
+	}
+
+	function flyingKick(){
+		if (airborne) { airAttack("kick"); return; }
+		if (!startMove()) return;
+		showPose("crouch");
+		setTimeout(function(){
+			faceHeldDirection();
+			showPose("tuck");
+			sfx.jump();
+			leap(700, 70, running ? 170 : 110, 0.2, land);
+		}, 80);
+	}
+
+	function sideKick(){
+		if (airborne) { airAttack("kick"); return; }
+		if (!startMove()) return;
+		sequence([
+			[0, function(){ showPose("sideChamber"); }],
+			[90, function(){ showPose("sideKick"); strike(42, 29, true); }],
+			[280, function(){ hidePow(); showPose("sideChamber"); }],
+			[90, finishMove]
+		]);
+	}
+
+	function roundhouse(){
+		if (airborne) { airAttack("roundhouse"); return; }
+		if (!startMove()) return;
+		sequence([
+			[0, function(){ showPose("roundChamber"); }],
+			[110, function(){ showPose("roundKick"); strike(39, 12, true); }],
+			[300, function(){ hidePow(); showPose("roundChamber"); }],
+			[100, finishMove]
+		]);
+	}
+
+	// ---- Weapons: ninja stars (kick the gate) and knives (dropped by beaten thugs) ----
+	// Walk over one to pick it up. T throws a star and Q throws a knife (either is gone once thrown);
+	// E thrusts with a knife, which hits twice as hard as a punch and keeps the knife.
+	var inventory = { star: 0, knife: 0 };
+	var inventoryEls = { star: document.getElementById("starCount"), knife: document.getElementById("knifeCount") };
+	var INVENTORY_ICONS = { star: "\u2726", knife: "\uD83D\uDDE1" };
+
+	function updateInventory(){
+		for (var kind in inventory) {
+			inventoryEls[kind].hidden = inventory[kind] === 0;
+			inventoryEls[kind].textContent = INVENTORY_ICONS[kind] + " \u00d7 " + inventory[kind];
+		}
+	}
+
+	scene.onCollect(function(kind){
+		inventory[kind]++;
+		updateInventory();
+		sfx.blip(kind === "knife" ? 660 : 880, kind === "knife" ? 1320 : 1760, 0.12);
+	});
+
+	function throwStar(){ throwWeapon("star"); }
+	function throwKnife(){ throwWeapon("knife"); }
+
+	// Mid-jump, a throw counts as the jump's one attack
+	function throwWeapon(kind){
+		if (inventory[kind] === 0) return;
+		if (airborne) {
+			if (airAttacked) return;
+			airAttacked = true;
+			showPose("airPunch");
+			var pose = movesImg.getBoundingClientRect();
+			launchWeapon(kind, facingLeft() ? pose.right - 40 : pose.left + 40, pose.top + 21);
+			return;
+		}
+		if (!startMove()) return;
+		ninjaImg.style.backgroundPosition = '-40px 0px';   // the punch frame doubles as a throw
+		var box = ninjaImg.getBoundingClientRect();
+		launchWeapon(kind, facingLeft() ? box.left : box.right, box.top + 21);
+		setTimeout(finishMove, 250);
+	}
+
+	function launchWeapon(kind, x, y){
+		inventory[kind]--;
+		updateInventory();
+		scene.throwStar(x, y, facingLeft() ? -1 : 1, kind);
+		sfx.blip(kind === "knife" ? 900 : 1400, 300, 0.15);
+	}
+
+	// A knife thrust: twice the damage of a punch, and the knife stays in hand
+	function knifeThrust(){
+		if (inventory.knife === 0 || airborne || !startMove()) return;
+		sequence([
+			[0, function(){ showPose("knifeThrust"); }],
+			[70, function(){ strike(60, 21, false, 2); }],
+			[230, finishMove]
+		]);
+	}
+
+	// ---- Stealth mode: hold S to fade out; let go and the ninja slowly fades back in ----
+	// Becoming stealthy takes full concentration, so nothing else works while S is held.
+	var STEALTH_MIN_OPACITY = 0.1, STEALTH_FADE_OUT_SECONDS = 1.5, STEALTH_FADE_IN_SECONDS = 4;
+	var stealthHeld = false, ninjaOpacity = 1, lastStealthTick = performance.now();
+
+	function beginStealth(){
+		if (moveBusy || airborne || stealthHeld) return;
+		stealthHeld = true;
+		scene.puff(ninjaImg.offsetLeft + NINJA_W / 2, ninjaImg.offsetTop + 30);
+	}
+
+	document.addEventListener("keyup", function(e){
+		if ((e.key || "").toLowerCase() === "s") stealthHeld = false;
+	});
+	window.addEventListener("blur", function(){ stealthHeld = false; });
+
+	(function stealthTick(now){
+		var dt = Math.min(0.05, (now - lastStealthTick) / 1000);
+		lastStealthTick = now;
+		var range = 1 - STEALTH_MIN_OPACITY;
+		if (stealthHeld) ninjaOpacity = Math.max(STEALTH_MIN_OPACITY, ninjaOpacity - dt * range / STEALTH_FADE_OUT_SECONDS);
+		else ninjaOpacity = Math.min(1, ninjaOpacity + dt * range / STEALTH_FADE_IN_SECONDS);
+		ninjaImg.style.opacity = ninjaOpacity;
+		movesImg.style.opacity = ninjaOpacity;
+		requestAnimationFrame(stealthTick);
+	})(lastStealthTick);
+
+	// Swallow a key press so it doesn't also turn into a punch (browser shortcuts still work)
+	function blockKey(e){
+		if (!e.ctrlKey && !e.metaKey && !e.altKey) e.preventDefault();
+	}
+
+	// ---- Walking and running ----
+	// Hold the arrow keys to walk quietly; hold Shift too to run, with loud chip-bag footsteps.
+	var WALK_SPEED = 60, RUN_SPEED = 180;   // pixels per second
+	var WALK_STRIDE = 6, RUN_STRIDE = 18;   // pixels travelled per footstep
+	var heldArrows = {}, running = false;
+	var strideDistance = 0, rightFootNext = true, carryX = 0, carryY = 0, lastWalkTick = performance.now();
+
+	// Village map: the ninja's feet position on the map (which is quicker to cross on foot)
+	var mapMode = false, mapPos = { x: 0, y: 0 }, MAP_SPEEDUP = 1.6;
+
+	// The top-down world the ninja is in: the village map or the Crypt
+	function topDownWorld(){
+		return currentScene === "dungeon" ? dungeon : worldMap;
+	}
+
+	function placeOnMap(){
+		var screen = topDownWorld().follow(mapPos, window.innerWidth, window.innerHeight);
+		ninjaImg.style.left = Math.round(screen.x - 23) + 'px';
+		ninjaImg.style.top = Math.round(screen.y - 46) + 'px';
+	}
+
+	// Moves the ninja along the world, which starts at x = 0 (the left edge of the first screen)
+	function moveNinjaBy(dx){
+		worldX = Math.max(0, worldX + dx);
+		placeNinja();
+	}
+
+	function placeNinja(){
+		if (mapMode) {
+			placeOnMap();
+			return;
+		}
+		var cameraX = scene.follow(worldX + 23);
+		ninjaImg.style.left = Math.round(worldX - cameraX) + 'px';
+	}
+
+	window.addEventListener("resize", function(){
+		if (!airborne) ninjaImg.style.top = scene.groundTop() + 'px';
+		placeNinja();
+	});
+
+	document.addEventListener("keyup", function(e){
+		running = e.shiftKey;
+		delete heldArrows[e.keyCode];
+	});
+	window.addEventListener("blur", function(){
+		heldArrows = {};
+		running = false;
+	});
+
+	function footstep(){
+		if (rightFootNext) {
+			stepRight();
+			if (running) audioStepRight.play();
+		} else {
+			stepLeft();
+			if (running) audioStepLeft.play();
+		}
+		rightFootNext = !rightFootNext;
+	}
+
+	(function walkTick(now){
+		var dt = Math.max(0, Math.min(0.05, (now - lastWalkTick) / 1000));
+		lastWalkTick = now;
+		// Side-scrolling scenes: only left and right. The village map: all four directions.
+		// Nothing works while becoming stealthy, and jumps pick their direction at takeoff.
+		var dx = (heldArrows[39] ? 1 : 0) - (heldArrows[37] ? 1 : 0);
+		var dy = mapMode ? (heldArrows[40] ? 1 : 0) - (heldArrows[38] ? 1 : 0) : 0;
+		if (stealthHeld || airborne || (!dx && !dy)) {
+			strideDistance = RUN_STRIDE;   // so the next footstep lands right away
+			requestAnimationFrame(walkTick);
+			return;
+		}
+		// Walking left off the start of a side-scrolling scene leads back to the village map
+		if (!mapMode && dx < 0 && worldX === 0 && !moveBusy) {
+			chooseScene("map", currentScene);
+			requestAnimationFrame(walkTick);
+			return;
+		}
+		var distance = (running ? RUN_SPEED : WALK_SPEED) * dt * (mapMode ? MAP_SPEEDUP : 1);
+		// Keep fractions of a pixel between frames so slow walking still moves on fast screens
+		var length = Math.sqrt(dx * dx + dy * dy);
+		carryX += dx / length * distance;
+		carryY += dy / length * distance;
+		var moveX = Math.trunc(carryX), moveY = Math.trunc(carryY);
+		carryX -= moveX;
+		carryY -= moveY;
+		if (mapMode) {
+			if (moveX || moveY) {
+				topDownWorld().move(mapPos, moveX, moveY);
+				placeOnMap();
+				var portal = topDownWorld().portalAt(mapPos);
+				if (portal) {
+					chooseScene(portal, currentScene);
+					requestAnimationFrame(walkTick);
+					return;
+				}
+			}
+		} else if (moveX) {
+			moveNinjaBy(moveX);
+		}
+		if (dx) ninjaImg.style.transform = dx < 0 ? "scaleX(-1)" : "scaleX(1)";
+		strideDistance += distance;
+		if (strideDistance >= (running ? RUN_STRIDE : WALK_STRIDE)) {
+			strideDistance = 0;
+			footstep();
+		}
+		requestAnimationFrame(walkTick);
+	})(lastWalkTick);
+
+	function move(e){
+		var key = (e.key || "").toLowerCase();
+		running = e.shiftKey;
+		// Arrow keys are handled by walkTick while they're held down
+		if (e.keyCode >= 37 && e.keyCode <= 40) {
+			blockKey(e);
+			heldArrows[e.keyCode] = true;
+			return;
+		}
+		if (key === "s") {
+			blockKey(e);
+			if (!e.repeat) beginStealth();
+			return;
+		}
+		if (stealthHeld) {
+			blockKey(e);
+			return;
+		}
+		if (MOVE_KEYS[key]) {
+			// Stops the key from also counting as a punch (and Space from scrolling)
+			blockKey(e);
+			// No jumping, flying kicks or throwing on the village map
+			if (mapMode && (key === " " || key === "f" || key === "t" || key === "q")) return;
+			if (!e.repeat) MOVE_KEYS[key]();
+			return;
+		}
+		// In the air, any other key throws a punch (one attack per jump)
+		if (airborne) {
+			blockKey(e);
+			if (!e.repeat && key.length === 1) airAttack("punch");
+			return;
+		}
+		// No punching in the middle of a kick
+		if (moveBusy) blockKey(e);
+	}
+
+	// ---- The Crypt: a Zelda-style dungeon ----
+	// Overhead rooms on a grid, joined by doorways, plus a side-view passage with a ladder that's the
+	// only way into the map room. It's dark: wall torches and the ninja's own glow light the way.
+	// The minimap fills in as rooms are explored, and shows the whole crypt once the map is found.
+	var dungeon = (function(){
+		var T = 64, COLS = 15, ROWS = 9, ROOM_W = COLS * T, ROOM_H = ROWS * T;
+		// The side-view passage: a floor, a ledge on the right, and a ladder between them
+		var SIDE_W = 960, SIDE_H = 540, FLOOR_Y = 500, LEDGE_Y = 250, LEDGE_X0 = 520, LADDER_X = 560;
+		// Tiles the ninja and enemies can't walk through
+		var BLOCKING = "#TPxoC";
+
+		// Legend: # wall   T wall torch   . floor   P pillar   x crate   o pot   C chest
+		//         S stairs to the side passage   E the way out to the village
+		// A "." in the middle of an outer wall is a doorway to the neighboring room on the grid.
+		var ROOMS = {
+			mapRoom: { grid: [0, 0], tiles: [
+				"#####T###T#####",
+				"#.............#",
+				"#.o.........o.#",
+				"#.............#",
+				"#......C......#",
+				"#.............#",
+				"#....S........#",
+				"#.............#",
+				"###T#######T###"
+			] },
+			throne: { grid: [1, 0], tiles: [
+				"####T##T##T####",
+				"#......C......#",
+				"#.P..P...P..P.#",
+				"#.............#",
+				"#..............",
+				"#.............#",
+				"#.P..P...P..P.#",
+				"#.............#",
+				"#######.#######"
+			] },
+			armory: { grid: [2, 0], tiles: [
+				"#####T###T#####",
+				"#.............#",
+				"#.xx.......xx.#",
+				"#.............#",
+				"..............#",
+				"#......C......#",
+				"#.xx.......xx.#",
+				"#.............#",
+				"#######.#######"
+			] },
+			crypt: { grid: [0, 1], tiles: [
+				"#####T###T#####",
+				"#.............#",
+				"#.oo.......xx.#",
+				"#.............#",
+				"#....S.........",
+				"#.............#",
+				"#.P.........P.#",
+				"#.............#",
+				"#######T#######"
+			] },
+			hall: { grid: [1, 1], tiles: [
+				"###T###.###T###",
+				"#.............#",
+				"T..P.......P..T",
+				"#.............#",
+				"...............",
+				"#.............#",
+				"T..P.......P..T",
+				"#.............#",
+				"#######.#######"
+			] },
+			cells: { grid: [2, 1], tiles: [
+				"#######.#######",
+				"#...#.....#...#",
+				"#...#.....#...#",
+				"#.............#",
+				"..............#",
+				"#.............#",
+				"#..x.......o..#",
+				"#.............#",
+				"###T#######T###"
+			] },
+			entrance: { grid: [1, 2], tiles: [
+				"###T###.###T###",
+				"#.............#",
+				"#..x.......x..#",
+				"#.............#",
+				"#....P...P....#",
+				"#.............#",
+				"#..o.......o..#",
+				"#.............#",
+				"#######E#######"
+			] },
+			passage: { side: true }
+		};
+		// What each chest holds
+		var CHESTS = { mapRoom: "map", armory: "knives", throne: "treasure" };
+		// Stairs lead into the passage: the crypt's to the bottom, the map room's to the top
+		var STAIRS = { crypt: { x: 90, y: FLOOR_Y }, mapRoom: { x: 880, y: LEDGE_Y } };
+		// Enemies: thugs patrol between two tiles; the ronin stands guard and looks around
+		var ENEMIES = {
+			hall: [{ kind: "thug", from: [3, 5], to: [11, 5], knife: true }],
+			cells: [{ kind: "thug", from: [7, 3], to: [7, 6] }, { kind: "thug", from: [2, 5], to: [5, 5], knife: true }],
+			armory: [{ kind: "thug", from: [3, 3], to: [11, 3], knife: true }],
+			throne: [{ kind: "ronin", from: [7, 3], to: [7, 3] }]
+		};
+		var THUG = { img: new Image(), cell: 64, torso: 30, feet: 54, reach: 44, speed: 125, windup: 0.3, attack: 0.3 };
+		var RONIN = { img: new Image(), cell: 80, torso: 32.5, feet: 61, reach: 64, speed: 70, windup: 0.45, attack: 0.35 };
+		THUG.img.src = "Resources/Images/Thug_Sprites.png";
+		RONIN.img.src = "Resources/Images/Villain_Sprites.png";
+		// Sight is short in the dark, longer when the ninja stands in torchlight; hearing is the same
+		var SIGHT_DARK = 190, SIGHT_LIT = 330, HEARING = 380;
+		var LOOK_AROUND = [[0, 1], [-1, 0], [0, -1], [1, 0]];
+
+		var current = "entrance", visited = {}, opened = {}, mapFound = false, exitRequested = false;
+		var enemies = {}, pickups = {}, push = null, fade = 0, ox = 0, oy = 0, lastTime = 0;
+		var lightCanvas = document.createElement("canvas"), lightCtx = lightCanvas.getContext("2d");
+		var minimap = document.getElementById("minimap"), minimapCtx = minimap.getContext("2d");
+		var toastEl = document.getElementById("toast"), toastTimer = null;
+
+		function hash(n){
+			var x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+			return x - Math.floor(x);
+		}
+
+		function room(){ return ROOMS[current]; }
+
+		function tileCenter(tile){ return { x: (tile[0] + 0.5) * T, y: (tile[1] + 0.85) * T }; }
+
+		function findTile(id, ch){
+			var tiles = ROOMS[id].tiles;
+			for (var r = 0; r < ROWS; r++) {
+				var c = tiles[r].indexOf(ch);
+				if (c >= 0) return { c: c, r: r };
+			}
+			return null;
+		}
+
+		// The tile under a room position; beyond the edge, a doorway's tile continues outward
+		function tileAt(px, py){
+			var tiles = room().tiles;
+			var c = Math.floor(px / T), r = Math.floor(py / T);
+			if (c >= 0 && r >= 0 && c < COLS && r < ROWS) return tiles[r][c];
+			var edge = tiles[Math.max(0, Math.min(ROWS - 1, r))][Math.max(0, Math.min(COLS - 1, c))];
+			return edge === "." ? "." : "#";
+		}
+
+		// Whether feet at (x, y) fit on walkable tiles (a small box around the feet)
+		function canStand(x, y){
+			var corners = [[x - 12, y - 10], [x + 12, y - 10], [x - 12, y - 1], [x + 12, y - 1]];
+			for (var i = 0; i < corners.length; i++) {
+				if (BLOCKING.indexOf(tileAt(corners[i][0], corners[i][1])) >= 0) return false;
+			}
+			return true;
+		}
+
+		function insideRoom(x, y){ return x > 16 && x < ROOM_W - 16 && y > 30 && y < ROOM_H - 6; }
+
+		function doorsOf(id){
+			var tiles = ROOMS[id].tiles, g = ROOMS[id].grid, doors = [];
+			[["N", tiles[0][7], 0, -1], ["S", tiles[ROWS - 1][7], 0, 1], ["W", tiles[4][0], -1, 0], ["E", tiles[4][COLS - 1], 1, 0]].forEach(function(d){
+				if (d[1] === "." && roomAt(g[0] + d[2], g[1] + d[3])) doors.push(d[0]);
+			});
+			return doors;
+		}
+
+		function roomAt(gx, gy){
+			for (var id in ROOMS) {
+				var g = ROOMS[id].grid;
+				if (g && g[0] === gx && g[1] === gy) return id;
+			}
+			return null;
+		}
+
+		function toast(text){
+			toastEl.textContent = text;
+			toastEl.hidden = false;
+			clearTimeout(toastTimer);
+			toastTimer = setTimeout(function(){ toastEl.hidden = true; }, 2400);
+		}
+
+		function goTo(id){
+			current = id;
+			visited[id] = true;
+			fade = 1;
+			push = null;
+		}
+
+		// ---------- the ninja moving around ----------
+		function move(pos, dx, dy){
+			if (room().side) {
+				moveSide(pos, dx, dy);
+				return;
+			}
+			if (dx && canStand(pos.x + dx, pos.y)) pos.x += dx;
+			if (dy && canStand(pos.x, pos.y + dy)) pos.y += dy;
+
+			// Through a doorway into the next room
+			var g = room().grid;
+			if (pos.y - 10 < 0) return throughDoor(g[0], g[1] - 1, pos, pos.x, ROOM_H - 14);
+			if (pos.y > ROOM_H) return throughDoor(g[0], g[1] + 1, pos, pos.x, 24);
+			if (pos.x - 12 < 0) return throughDoor(g[0] - 1, g[1], pos, ROOM_W - 16, pos.y);
+			if (pos.x + 12 > ROOM_W) return throughDoor(g[0] + 1, g[1], pos, 16, pos.y);
+
+			var under = tileAt(pos.x, pos.y - 5);
+			if (under === "S") {
+				var stairs = STAIRS[current];
+				goTo("passage");
+				pos.x = stairs.x;
+				pos.y = stairs.y;
+				pos.climbing = pos.falling = false;
+				return;
+			}
+			if (under === "E") exitRequested = true;
+			openNearbyChest(pos);
+			collectPickups(pos);
+		}
+
+		function throughDoor(gx, gy, pos, x, y){
+			var id = roomAt(gx, gy);
+			if (!id) return;
+			goTo(id);
+			pos.x = x;
+			pos.y = y;
+		}
+
+		// In the side-view passage: walk along the floor or ledge, climb the ladder with up/down
+		function moveSide(pos, dx, dy){
+			if (pos.falling) return;
+			if (pos.climbing) {
+				if (dy) pos.y = Math.max(LEDGE_Y, Math.min(FLOOR_Y, pos.y + dy));
+				// Step off at either end of the ladder
+				if (!(dx && (pos.y === LEDGE_Y || pos.y === FLOOR_Y))) return;
+				pos.climbing = false;
+			}
+			var atLadder = Math.abs(pos.x - LADDER_X) < 18;
+			if (dy && atLadder && ((dy < 0 && pos.y === FLOOR_Y) || (dy > 0 && pos.y === LEDGE_Y))) {
+				pos.climbing = true;
+				pos.x = LADDER_X;
+				pos.y = Math.max(LEDGE_Y, Math.min(FLOOR_Y, pos.y + dy));
+				return;
+			}
+			if (!dx) return;
+			pos.x += dx;
+			if (pos.y === FLOOR_Y && pos.x < 24) return leavePassage("crypt", pos);
+			if (pos.y === LEDGE_Y && pos.x > SIDE_W - 24) return leavePassage("mapRoom", pos);
+			pos.x = Math.max(24, Math.min(SIDE_W - 24, pos.x));
+			if (pos.y === LEDGE_Y && pos.x < LEDGE_X0) pos.falling = true;
+		}
+
+		// Back out of the passage, arriving just below the stairs that lead to it
+		function leavePassage(id, pos){
+			var stairs = findTile(id, "S");
+			goTo(id);
+			pos.x = (stairs.c + 0.5) * T;
+			pos.y = (stairs.r + 1.5) * T;
+			pos.climbing = pos.falling = false;
+		}
+
+		function openNearbyChest(pos){
+			var reward = CHESTS[current], chest = reward && !opened[current] && findTile(current, "C");
+			if (!chest || Math.hypot(pos.x - (chest.c + 0.5) * T, pos.y - (chest.r + 0.5) * T) > 72) return;
+			opened[current] = true;
+			if (reward === "map") {
+				mapFound = true;
+				toast("You found the dungeon map!");
+				music.jingle();
+			} else if (reward === "knives") {
+				inventory.knife += 3;
+				updateInventory();
+				toast("A stash of 3 knives!");
+				sfx.blip(660, 1320, 0.2);
+			} else {
+				inventory.star += 10;
+				updateInventory();
+				toast("Treasure! 10 ninja stars");
+				music.jingle();
+			}
+		}
+
+		function collectPickups(pos){
+			var list = pickups[current] || [];
+			for (var i = list.length - 1; i >= 0; i--) {
+				if (Math.hypot(pos.x - list[i].x, pos.y - list[i].y) > 30) continue;
+				inventory[list[i].kind]++;
+				updateInventory();
+				sfx.blip(list[i].kind === "knife" ? 660 : 880, list[i].kind === "knife" ? 1320 : 1760, 0.12);
+				list.splice(i, 1);
+			}
+		}
+
+		function drop(kind, x, y){
+			(pickups[current] = pickups[current] || []).push({ kind: kind, x: x, y: y });
+		}
+
+		// ---------- enemies ----------
+		function makeEnemies(){
+			enemies = {};
+			pickups = {};
+			Object.keys(ENEMIES).forEach(function(id){
+				enemies[id] = ENEMIES[id].map(function(def){
+					var from = tileCenter(def.from), to = tileCenter(def.to);
+					var dirX = Math.sign(to.x - from.x), dirY = Math.sign(to.y - from.y);
+					if (!dirX && !dirY) dirY = 1;
+					return {
+						kind: def.kind, look: def.kind === "ronin" ? RONIN : THUG, x: from.x, y: from.y, from: from, to: to, target: to,
+						dirX: dirX, dirY: dirY, facingX: dirX || 1, state: def.kind === "ronin" ? "guard" : "patrol", stateTime: 0,
+						hp: def.kind === "ronin" ? 5 : 1, knife: !!def.knife, fall: 0, fade: 1, spin: 0,
+						bubble: "", alertBubble: false, bubbleUntil: 0, invulnerableUntil: 0, noise: null
+					};
+				});
+			});
+		}
+
+		function standing(e){ return e.state !== "down" && e.state !== "defeated" && e.state !== "gone"; }
+		function setState(e, state){ e.state = state; e.stateTime = 0; }
+		function say(e, text, alert, seconds){
+			e.bubble = text;
+			e.alertBubble = alert;
+			e.bubbleUntil = performance.now() + seconds * 1000;
+		}
+
+		function lookToward(e, dx, dy){
+			if (Math.abs(dx) > Math.abs(dy)) {
+				e.dirX = Math.sign(dx);
+				e.dirY = 0;
+				e.facingX = e.dirX;
+			} else {
+				e.dirX = 0;
+				e.dirY = Math.sign(dy) || 1;
+			}
+		}
+
+		// Moves an enemy toward a point, sliding along walls; returns true once it's there
+		function stepToward(e, tx, ty, speed, dt){
+			var dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy);
+			if (d < 1) return true;
+			var step = Math.min(d, speed * dt), mx = dx / d * step, my = dy / d * step;
+			if (canStand(e.x + mx, e.y) && insideRoom(e.x + mx, e.y)) e.x += mx;
+			if (canStand(e.x, e.y + my) && insideRoom(e.x, e.y + my)) e.y += my;
+			return d <= step;
+		}
+
+		function torchLights(){
+			var tiles = room().tiles, lights = [];
+			for (var r = 0; r < ROWS; r++) {
+				for (var c = 0; c < COLS; c++) {
+					if (tiles[r][c] !== "T") continue;
+					var nx = c === 0 ? 1.2 : c === COLS - 1 ? -0.2 : 0.5;
+					var ny = r === 0 ? 1.2 : r === ROWS - 1 ? -0.2 : 0.5;
+					lights.push({ x: (c + nx) * T, y: (r + ny) * T, r: 190, warm: true, seed: r * 15 + c });
+				}
+			}
+			return lights;
+		}
+
+		function knockOut(e){
+			setState(e, "down");
+			e.bubble = "";
+			if (e.knife) drop("knife", e.x, e.y);
+			// The commotion makes nearby enemies look around
+			(enemies[current] || []).forEach(function(other){
+				if (other === e || !standing(other) || Math.hypot(other.x - e.x, other.y - e.y) > HEARING) return;
+				if (other.state === "patrol" || other.state === "idle" || other.state === "guard" || other.state === "lost") {
+					other.noise = { x: e.x - other.x, y: e.y - other.y };
+					setState(other, "heard");
+					say(other, "Eh?", false, 1);
+				}
+			});
+		}
+
+		function defeatRonin(e){
+			setState(e, "defeated");
+			scene.puff(e.x + ox, e.y + oy - 30);
+			for (var i = 0; i < 5; i++) drop("star", e.x + (i - 2) * 22, e.y + (i % 2) * 14);
+		}
+
+		// Shoves the ninja away from an enemy, sliding along walls
+		function pushNinja(e){
+			var dx = mapPos.x - e.x, dy = mapPos.y - e.y, d = Math.hypot(dx, dy) || 1;
+			push = { vx: dx / d * 300, vy: dy / d * 300, time: 0.2 };
+			scene.hit(mapPos.x + ox, mapPos.y + oy - 25);
+			sfx.blip(320, 110, 0.25);
+		}
+
+		function updateEnemies(dt, lights){
+			var list = enemies[current] || [];
+			var ninjaVisible = ninjaOpacity >= 0.4;
+			var moving = heldArrows[37] || heldArrows[38] || heldArrows[39] || heldArrows[40];
+			var noisy = running && moving && !stealthHeld;
+			var lit = lights.some(function(l){ return Math.hypot(l.x - mapPos.x, l.y - mapPos.y) < 170; });
+			var sight = lit ? SIGHT_LIT : SIGHT_DARK;
+			var spotted = false;
+
+			list.forEach(function(e){
+				e.stateTime += dt;
+				var look = e.look;
+				var dx = mapPos.x - e.x, dy = mapPos.y - e.y, dist = Math.hypot(dx, dy);
+				var inFront = dist > 0 && (dx * e.dirX + dy * e.dirY) / dist > 0.5;
+				var sees = ninjaVisible && inFront && dist < sight;
+				var calm = e.state === "patrol" || e.state === "idle" || e.state === "guard" || e.state === "lost";
+
+				if ((calm || e.state === "heard" || e.state === "look") && sees) spotted = true;
+				else if (calm && noisy && dist < HEARING && !inFront) {
+					e.noise = { x: dx, y: dy };
+					setState(e, "heard");
+					say(e, "Eh?", false, 1);
+				}
+
+				if (e.state === "patrol") {
+					lookToward(e, e.target.x - e.x, e.target.y - e.y);
+					if (stepToward(e, e.target.x, e.target.y, 30, dt)) {
+						e.target = e.target === e.to ? e.from : e.to;
+						setState(e, "idle");
+					}
+				} else if (e.state === "idle") {
+					if (e.stateTime > 1.2) setState(e, "patrol");
+				} else if (e.state === "guard") {
+					var dir = LOOK_AROUND[Math.floor(e.stateTime / 1.8) % 4];
+					e.dirX = dir[0];
+					e.dirY = dir[1];
+					if (dir[0]) e.facingX = dir[0];
+				} else if (e.state === "heard") {
+					if (e.stateTime > 0.45) {
+						lookToward(e, e.noise.x, e.noise.y);
+						setState(e, "look");
+					}
+				} else if (e.state === "look") {
+					if (e.stateTime > 1.4) setState(e, e.kind === "ronin" ? "guard" : "patrol");
+				} else if (e.state === "alert") {
+					lookToward(e, dx, dy);
+					if (e.stateTime > 0.35) setState(e, "chase");
+				} else if (e.state === "chase") {
+					if (!ninjaVisible) {
+						say(e, "?", false, 1.2);
+						setState(e, "lost");
+					} else if (dist > look.reach) {
+						lookToward(e, dx, dy);
+						stepToward(e, mapPos.x, mapPos.y, look.speed, dt);
+					} else {
+						setState(e, "windup");
+					}
+				} else if (e.state === "windup") {
+					lookToward(e, dx, dy);
+					if (e.stateTime > look.windup) {
+						setState(e, "attack");
+						sfx.blip(900, 200, 0.18);
+						if (ninjaVisible && dist < look.reach + 20) pushNinja(e);
+					}
+				} else if (e.state === "attack") {
+					if (e.stateTime > look.attack) setState(e, "recover");
+				} else if (e.state === "recover") {
+					if (e.stateTime > 0.6) setState(e, "chase");
+				} else if (e.state === "hurt") {
+					if (e.stateTime > 0.35) setState(e, "chase");
+				} else if (e.state === "down") {
+					e.fall = Math.min(1, e.stateTime / 0.35);
+					e.fade = e.stateTime < 0.9 ? 1 : Math.max(0, 1 - (e.stateTime - 0.9) / 0.9);
+					if (e.stateTime > 1.8) setState(e, "gone");
+				} else if (e.state === "defeated") {
+					e.spin += dt * 9;
+					e.fade = Math.max(0, 1 - e.stateTime / 0.9);
+					if (e.stateTime > 1) setState(e, "gone");
+				}
+			});
+
+			// One enemy spotting the ninja alerts everyone in the room
+			if (spotted) {
+				list.forEach(function(e){
+					if (!standing(e) || e.state === "chase" || e.state === "alert" || e.state === "windup" || e.state === "attack" || e.state === "recover" || e.state === "hurt") return;
+					setState(e, "alert");
+					e.stateTime = -Math.random() * 0.25;
+					say(e, "!", true, 0.9);
+				});
+			}
+		}
+
+		// An attack of the given damage landed at screen point (px, py); returns true if it hit an enemy
+		function hitAt(px, py, damage){
+			if (room().side) return false;
+			var rx = px - ox, ry = py - oy, now = performance.now();
+			var list = enemies[current] || [];
+			for (var i = 0; i < list.length; i++) {
+				var e = list[i];
+				if (!standing(e) || now < e.invulnerableUntil) continue;
+				if (Math.abs(rx - e.x) > 34 || ry < e.y - e.look.feet - 2 || ry > e.y + 6) continue;
+				if (e.kind === "thug") {
+					knockOut(e);
+				} else {
+					e.hp -= damage || 1;
+					e.invulnerableUntil = now + 300;
+					e.x += (rx < e.x ? 1 : -1) * 20;
+					if (e.hp <= 0) defeatRonin(e);
+					else setState(e, "hurt");
+				}
+				return true;
+			}
+			return false;
+		}
+
+		// ---------- drawing ----------
+		function isWall(ch){ return ch === "#" || ch === "T"; }
+
+		function drawTorch(ctx, x, y, time, seed){
+			ctx.fillStyle = "#2a2420";
+			ctx.fillRect(x - 3, y - 2, 6, 12);
+			var flicker = 1 + 0.15 * Math.sin(time * 18 + seed) + 0.1 * Math.sin(time * 31 + seed * 2);
+			ctx.fillStyle = "#ff8a2a";
+			ctx.beginPath();
+			ctx.ellipse(x, y - 8, 6, 10 * flicker, 0, 0, Math.PI * 2);
+			ctx.fill();
+			ctx.fillStyle = "#ffd46a";
+			ctx.beginPath();
+			ctx.ellipse(x, y - 6, 3, 6 * flicker, 0, 0, Math.PI * 2);
+			ctx.fill();
+		}
+
+		function drawRoom(ctx, time){
+			var tiles = room().tiles, r, c, x, y, ch;
+			for (r = 0; r < ROWS; r++) {
+				for (c = 0; c < COLS; c++) {
+					ch = tiles[r][c];
+					x = ox + c * T;
+					y = oy + r * T;
+					if (isWall(ch)) {
+						ctx.fillStyle = "#4a4356";
+						ctx.fillRect(x, y, T, T);
+						ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+						ctx.fillRect(x, y + T / 2, T, 2);
+						ctx.fillRect(x + (r % 2 ? T / 2 : 0), y, 2, T / 2);
+						ctx.fillRect(x + (r % 2 ? 0 : T / 2), y + T / 2, 2, T / 2);
+						// The wall's front face, where it meets the floor below
+						if (r < ROWS - 1 && !isWall(tiles[r + 1][c])) {
+							ctx.fillStyle = "#2a2531";
+							ctx.fillRect(x, y + T - 18, T, 18);
+						}
+					} else {
+						ctx.fillStyle = (r + c) % 2 ? "#322c3a" : "#2d2835";
+						ctx.fillRect(x, y, T, T);
+						if (hash(r * 31 + c * 7 + current.length) < 0.25) {
+							ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+							ctx.lineWidth = 1;
+							ctx.beginPath();
+							ctx.moveTo(x + 12, y + 20);
+							ctx.lineTo(x + 26, y + 30);
+							ctx.lineTo(x + 34, y + 26);
+							ctx.stroke();
+						}
+						if (ch === "S") {
+							for (var s = 0; s < 5; s++) {
+								var shade = 70 - s * 14;
+								ctx.fillStyle = "rgb(" + shade + ", " + (shade - 6) + ", " + (shade + 12) + ")";
+								ctx.fillRect(x + 6, y + 6 + s * 11, T - 12, 9);
+							}
+						} else if (ch === "E") {
+							var daylight = ctx.createLinearGradient(0, y, 0, y + T);
+							daylight.addColorStop(0, "rgba(255, 230, 170, 0.05)");
+							daylight.addColorStop(1, "rgba(255, 230, 170, 0.45)");
+							ctx.fillStyle = daylight;
+							ctx.fillRect(x, y, T, T);
+						}
+					}
+				}
+			}
+			// Objects standing on the floor, top row first so lower ones overlap
+			for (r = 0; r < ROWS; r++) {
+				for (c = 0; c < COLS; c++) {
+					ch = tiles[r][c];
+					x = ox + c * T;
+					y = oy + r * T;
+					if (ch === "T") {
+						var tx = c === 0 ? x + T - 14 : c === COLS - 1 ? x + 14 : x + T / 2;
+						var ty = r === 0 ? y + T - 26 : r === ROWS - 1 ? y + 22 : y + T / 2;
+						drawTorch(ctx, tx, ty, time, r * 15 + c);
+					} else if (ch === "P") {
+						ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+						ctx.beginPath();
+						ctx.ellipse(x + T / 2 + 4, y + T - 8, 24, 9, 0, 0, Math.PI * 2);
+						ctx.fill();
+						ctx.fillStyle = "#5a5266";
+						ctx.fillRect(x + 16, y - 14, T - 32, T - 4);
+						ctx.fillStyle = "#6c6379";
+						ctx.fillRect(x + 16, y - 14, 8, T - 4);
+						ctx.fillStyle = "#726a80";
+						ctx.fillRect(x + 10, y - 20, T - 20, 10);
+					} else if (ch === "x") {
+						ctx.fillStyle = "#6b4a2a";
+						ctx.fillRect(x + 10, y + 10, T - 20, T - 18);
+						ctx.fillStyle = "#4a3220";
+						ctx.fillRect(x + 10, y + 10, T - 20, 5);
+						ctx.fillRect(x + 10, y + T / 2, T - 20, 4);
+						ctx.fillRect(x + T / 2 - 2, y + 10, 4, T - 18);
+					} else if (ch === "o") {
+						ctx.fillStyle = "#8a5a3c";
+						ctx.beginPath();
+						ctx.ellipse(x + T / 2, y + T / 2 + 6, 18, 20, 0, 0, Math.PI * 2);
+						ctx.fill();
+						ctx.fillStyle = "#3a2418";
+						ctx.beginPath();
+						ctx.ellipse(x + T / 2, y + T / 2 - 12, 9, 4, 0, 0, Math.PI * 2);
+						ctx.fill();
+					} else if (ch === "C") {
+						var open = opened[current];
+						ctx.fillStyle = "#7a4a22";
+						ctx.fillRect(x + 12, y + 24, T - 24, 30);
+						ctx.fillStyle = "#c9a23a";
+						ctx.fillRect(x + 12, y + 36, T - 24, 4);
+						if (open) {
+							ctx.fillStyle = "#140c08";
+							ctx.fillRect(x + 14, y + 20, T - 28, 8);
+							ctx.fillStyle = "#8a5a2a";
+							ctx.fillRect(x + 12, y + 4, T - 24, 16);
+						} else {
+							ctx.fillStyle = "#8a5a2a";
+							ctx.fillRect(x + 12, y + 14, T - 24, 12);
+							ctx.fillStyle = "#c9a23a";
+							ctx.fillRect(x + T / 2 - 4, y + 30, 8, 10);
+						}
+					}
+				}
+			}
+		}
+
+		function drawPickups(ctx, time){
+			(pickups[current] || []).forEach(function(p, i){
+				var x = ox + p.x, y = oy + p.y - 6;
+				ctx.globalAlpha = 0.75 + 0.25 * Math.sin(time * 6 + i);
+				ctx.save();
+				ctx.translate(x, y);
+				if (p.kind === "knife") {
+					ctx.fillStyle = "#d8dde6";
+					ctx.fillRect(-2, -2, 16, 4);
+					ctx.fillStyle = "#c9a23a";
+					ctx.fillRect(-4, -4, 2, 8);
+					ctx.fillStyle = "#5a3a22";
+					ctx.fillRect(-12, -2, 8, 4);
+				} else {
+					ctx.fillStyle = "#9aa0ab";
+					ctx.beginPath();
+					for (var k = 0; k < 8; k++) {
+						var a = k * Math.PI / 4, reach = k % 2 ? 3 : 9;
+						ctx.lineTo(Math.cos(a) * reach, Math.sin(a) * reach);
+					}
+					ctx.closePath();
+					ctx.fill();
+				}
+				ctx.restore();
+			});
+			ctx.globalAlpha = 1;
+		}
+
+		function enemyFrame(e){
+			if (e.kind === "ronin") return e.state === "attack" ? 1 : (e.state === "hurt" || e.state === "defeated") ? 2 : 0;
+			if (e.state === "patrol") return Math.floor(e.stateTime * 5) % 2 ? 1 : 2;
+			if (e.state === "chase") return Math.floor(e.stateTime * 10) % 2 ? 1 : 2;
+			if (e.state === "attack") return 3;
+			if (e.state === "down") return 4;
+			return 0;
+		}
+
+		function drawEnemies(ctx){
+			var list = (enemies[current] || []).filter(function(e){ return e.state !== "gone"; });
+			list.sort(function(a, b){ return a.y - b.y; });
+			ctx.imageSmoothingEnabled = false;
+			list.forEach(function(e){
+				var look = e.look, x = Math.round(ox + e.x), y = Math.round(oy + e.y);
+				ctx.save();
+				ctx.globalAlpha = e.fade;
+				ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+				ctx.beginPath();
+				ctx.ellipse(x, y, 16, 5, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.translate(x, y);
+				if (e.facingX < 0) ctx.scale(-1, 1);
+				if (e.fall) ctx.rotate(-Math.PI / 2 * e.fall);
+				if (e.spin) ctx.rotate(e.spin);
+				ctx.drawImage(look.img, enemyFrame(e) * look.cell, 0, look.cell, look.cell === 80 ? 64 : 56, -look.torso, -look.feet, look.cell, look.cell === 80 ? 64 : 56);
+				ctx.restore();
+				if (e.kind === "ronin" && standing(e)) {
+					ctx.fillStyle = "rgba(20, 0, 8, 0.7)";
+					ctx.fillRect(x - 22, y - look.feet - 10, 44, 5);
+					ctx.fillStyle = "#ff4a3a";
+					ctx.fillRect(x - 22, y - look.feet - 10, 44 * Math.max(0, e.hp) / 5, 5);
+				}
+			});
+			ctx.imageSmoothingEnabled = true;
+		}
+
+		function drawBubbles(ctx){
+			var now = performance.now();
+			(enemies[current] || []).forEach(function(e){
+				if (!e.bubble || now > e.bubbleUntil || !standing(e)) return;
+				var x = ox + e.x, y = oy + e.y - e.look.feet - 14;
+				ctx.font = "bold 13px 'Segoe UI', system-ui, sans-serif";
+				var w = ctx.measureText(e.bubble).width + 14, h = 20;
+				ctx.fillStyle = e.alertBubble ? "#d8322a" : "#fff8e8";
+				ctx.strokeStyle = e.alertBubble ? "#5a0f0a" : "#2b1b4a";
+				ctx.lineWidth = 2;
+				ctx.beginPath();
+				ctx.moveTo(x - w / 2 + 9, y - h);
+				ctx.arcTo(x + w / 2, y - h, x + w / 2, y, 9);
+				ctx.arcTo(x + w / 2, y, x - w / 2, y, 9);
+				ctx.lineTo(x + 5, y);
+				ctx.lineTo(x, y + 6);
+				ctx.lineTo(x - 5, y);
+				ctx.arcTo(x - w / 2, y, x - w / 2, y - h, 9);
+				ctx.arcTo(x - w / 2, y - h, x + w / 2, y - h, 9);
+				ctx.closePath();
+				ctx.fill();
+				ctx.stroke();
+				ctx.fillStyle = e.alertBubble ? "#fff" : "#2b1b4a";
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				ctx.fillText(e.bubble, x, y - h / 2);
+			});
+		}
+
+		function drawArch(ctx, x, floorY, w, h){
+			ctx.fillStyle = "#08060c";
+			ctx.beginPath();
+			ctx.moveTo(x, floorY);
+			ctx.lineTo(x, floorY - h + w / 2);
+			ctx.arc(x + w / 2, floorY - h + w / 2, w / 2, Math.PI, 0);
+			ctx.lineTo(x + w, floorY);
+			ctx.closePath();
+			ctx.fill();
+			ctx.strokeStyle = "#5a5264";
+			ctx.lineWidth = 4;
+			ctx.stroke();
+		}
+
+		var SIDE_TORCHES = [{ x: 250, y: 360 }, { x: 760, y: 130 }, { x: 140, y: 150 }];
+
+		function drawPassage(ctx, time){
+			ctx.fillStyle = "#2a2632";
+			ctx.fillRect(ox, oy, SIDE_W, SIDE_H);
+			ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+			for (var row = 0; row * 30 < SIDE_H; row++) {
+				var yy = oy + row * 30;
+				ctx.fillRect(ox, yy, SIDE_W, 2);
+				for (var col = (row % 2) * 30; col < SIDE_W; col += 60) ctx.fillRect(ox + col, yy, 2, 30);
+			}
+			// Hanging chains
+			ctx.fillStyle = "#1a1620";
+			[380, 700, 860].forEach(function(cx, i){
+				for (var ly = 0; ly < 90 + i * 30; ly += 8) ctx.fillRect(ox + cx - 2 + (ly % 16 ? 2 : 0), oy + ly, 3, 6);
+			});
+			drawArch(ctx, ox, oy + FLOOR_Y, 70, 110);
+			drawArch(ctx, ox + SIDE_W - 70, oy + LEDGE_Y, 70, 110);
+			// Floor, ledge and the ladder between them
+			ctx.fillStyle = "#3d3746";
+			ctx.fillRect(ox, oy + FLOOR_Y, SIDE_W, SIDE_H - FLOOR_Y);
+			ctx.fillRect(ox + LEDGE_X0, oy + LEDGE_Y, SIDE_W - LEDGE_X0, 26);
+			ctx.fillStyle = "#4a4356";
+			ctx.fillRect(ox, oy + FLOOR_Y, SIDE_W, 6);
+			ctx.fillRect(ox + LEDGE_X0, oy + LEDGE_Y, SIDE_W - LEDGE_X0, 6);
+			ctx.fillStyle = "#7a5a36";
+			ctx.fillRect(ox + LADDER_X - 16, oy + LEDGE_Y - 12, 5, FLOOR_Y - LEDGE_Y + 12);
+			ctx.fillRect(ox + LADDER_X + 11, oy + LEDGE_Y - 12, 5, FLOOR_Y - LEDGE_Y + 12);
+			for (var ry = LEDGE_Y + 6; ry < FLOOR_Y; ry += 22) ctx.fillRect(ox + LADDER_X - 16, oy + ry, 32, 4);
+			// Water dripping from the ceiling into a puddle
+			var drip = (time * 260) % 560;
+			ctx.fillStyle = "rgba(150, 190, 230, 0.7)";
+			if (drip < FLOOR_Y) ctx.fillRect(ox + 420, oy + drip, 2, 7);
+			ctx.fillStyle = "rgba(110, 150, 200, 0.35)";
+			ctx.beginPath();
+			ctx.ellipse(ox + 421, oy + FLOOR_Y + 4, 26, 4, 0, 0, Math.PI * 2);
+			ctx.fill();
+			SIDE_TORCHES.forEach(function(t, i){ drawTorch(ctx, ox + t.x, oy + t.y, time, i * 7); });
+		}
+
+		// Darkness over the room, with holes of light around torches and the ninja
+		function drawDarkness(ctx, w, h, lights, time){
+			if (lightCanvas.width !== w || lightCanvas.height !== h) {
+				lightCanvas.width = w;
+				lightCanvas.height = h;
+			}
+			var g = lightCtx;
+			g.globalCompositeOperation = "source-over";
+			g.clearRect(0, 0, w, h);
+			g.fillStyle = "rgba(4, 2, 10, 0.86)";
+			g.fillRect(0, 0, w, h);
+			g.globalCompositeOperation = "destination-out";
+			lights.forEach(function(l){
+				var r = l.r * (1 + 0.05 * Math.sin(time * 9 + (l.seed || 0)));
+				var glow = g.createRadialGradient(l.x, l.y, r * 0.15, l.x, l.y, r);
+				glow.addColorStop(0, "rgba(0, 0, 0, 1)");
+				glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+				g.fillStyle = glow;
+				g.fillRect(l.x - r, l.y - r, r * 2, r * 2);
+			});
+			ctx.drawImage(lightCanvas, ox, oy);
+			ctx.save();
+			ctx.globalCompositeOperation = "lighter";
+			lights.forEach(function(l){
+				if (!l.warm) return;
+				var r = l.r * 0.7;
+				var warm = ctx.createRadialGradient(ox + l.x, oy + l.y, 0, ox + l.x, oy + l.y, r);
+				warm.addColorStop(0, "rgba(255, 140, 50, 0.22)");
+				warm.addColorStop(1, "rgba(255, 140, 50, 0)");
+				ctx.fillStyle = warm;
+				ctx.fillRect(ox + l.x - r, oy + l.y - r, r * 2, r * 2);
+			});
+			ctx.restore();
+		}
+
+		function drawMinimap(time){
+			var g = minimapCtx, cw = 34, ch = 22, gap = 8, left = 12, top = 22;
+			function cell(id){
+				var gp = ROOMS[id].grid;
+				return { x: left + gp[0] * (cw + gap), y: top + gp[1] * (ch + gap) };
+			}
+			g.clearRect(0, 0, minimap.width, minimap.height);
+			g.fillStyle = "rgba(20, 12, 28, 0.85)";
+			g.fillRect(0, 0, minimap.width, minimap.height);
+			g.fillStyle = "#cdbfe0";
+			g.font = "bold 10px 'Segoe UI', system-ui, sans-serif";
+			g.textAlign = "left";
+			g.textBaseline = "top";
+			g.fillText(mapFound ? "THE CRYPT" : "THE CRYPT (no map)", left, 6);
+			// The side passage between the crypt and the map room
+			if (visited.passage || mapFound) {
+				var a = cell("crypt"), b = cell("mapRoom");
+				g.strokeStyle = visited.passage ? "#8a7f9a" : "#4e4762";
+				g.setLineDash([3, 3]);
+				g.lineWidth = 2;
+				g.beginPath();
+				g.moveTo(a.x - 6, a.y + ch / 2);
+				g.lineTo(b.x - 6, b.y + ch / 2);
+				g.stroke();
+				g.setLineDash([]);
+			}
+			Object.keys(ROOMS).forEach(function(id){
+				if (ROOMS[id].side || !(visited[id] || mapFound)) return;
+				var c = cell(id);
+				g.fillStyle = visited[id] ? "#7d7290" : "#3e3850";
+				g.fillRect(c.x, c.y, cw, ch);
+				doorsOf(id).forEach(function(d){
+					if (d === "E") g.fillRect(c.x + cw, c.y + ch / 2 - 3, gap, 6);
+					if (d === "S") g.fillRect(c.x + cw / 2 - 3, c.y + ch, 6, gap);
+				});
+				if (mapFound && CHESTS[id] && !opened[id]) {
+					g.fillStyle = "#e8c04a";
+					g.fillRect(c.x + cw - 8, c.y + 3, 5, 5);
+				}
+			});
+			var here = current === "passage" ? { x: cell("crypt").x - 6, y: cell("crypt").y - gap / 2 } : { x: cell(current).x + cw / 2, y: cell(current).y + ch / 2 };
+			if (Math.sin(time * 6) > -0.3) {
+				g.fillStyle = "#ffd23f";
+				g.beginPath();
+				g.arc(here.x, here.y, 3.5, 0, Math.PI * 2);
+				g.fill();
+			}
+		}
+
+		function render(ctx, w, h, dt, time){
+			ctx.fillStyle = "#000";
+			ctx.fillRect(0, 0, w, h);
+			var side = room().side;
+
+			if (side) {
+				if (mapPos.falling) {
+					mapPos.y = Math.min(FLOOR_Y, mapPos.y + 520 * dt);
+					if (mapPos.y === FLOOR_Y) mapPos.falling = false;
+					placeOnMap();
+				}
+			} else if (push) {
+				var mx = push.vx * dt, my = push.vy * dt;
+				if (canStand(mapPos.x + mx, mapPos.y) && insideRoom(mapPos.x + mx, mapPos.y)) mapPos.x += mx;
+				if (canStand(mapPos.x, mapPos.y + my) && insideRoom(mapPos.x, mapPos.y + my)) mapPos.y += my;
+				push.time -= dt;
+				if (push.time <= 0) push = null;
+				placeOnMap();
+			}
+
+			var ninjaLight = { x: mapPos.x, y: mapPos.y - 25, r: 125 };
+			if (side) {
+				drawPassage(ctx, time);
+				var sideLights = SIDE_TORCHES.map(function(t, i){ return { x: t.x, y: t.y - 6, r: 200, warm: true, seed: i * 7 }; });
+				sideLights.push(ninjaLight, { x: 35, y: FLOOR_Y - 50, r: 90 }, { x: SIDE_W - 35, y: LEDGE_Y - 50, r: 90 });
+				drawDarkness(ctx, SIDE_W, SIDE_H, sideLights, time);
+			} else {
+				var lights = torchLights();
+				updateEnemies(dt, lights);
+				collectPickups(mapPos);
+				drawRoom(ctx, time);
+				drawPickups(ctx, time);
+				drawEnemies(ctx);
+				lights.push(ninjaLight);
+				if (current === "entrance") lights.push({ x: 7.5 * T, y: ROOM_H, r: 160 });
+				drawDarkness(ctx, ROOM_W, ROOM_H, lights, time);
+				drawBubbles(ctx);
+			}
+
+			if (fade > 0) {
+				ctx.fillStyle = "rgba(0, 0, 0, " + fade + ")";
+				ctx.fillRect(0, 0, w, h);
+				fade = Math.max(0, fade - dt * 4);
+			}
+			drawMinimap(time);
+		}
+
+		return {
+			render: render,
+			// Starts a visit at the entrance (enemies and dropped items are fresh each visit;
+			// explored rooms, opened chests and the map are remembered)
+			spawn: function(){
+				makeEnemies();
+				exitRequested = false;
+				goTo("entrance");
+				toast("The Crypt");
+				return { x: 7.5 * T, y: 7.4 * T };
+			},
+			move: move,
+			// "map" once the ninja steps onto the way out
+			portalAt: function(){
+				if (!exitRequested) return null;
+				exitRequested = false;
+				return "map";
+			},
+			follow: function(pos, w, h){
+				var side = room().side;
+				ox = Math.round((w - (side ? SIDE_W : ROOM_W)) / 2);
+				oy = Math.max(60, Math.round((h - (side ? SIDE_H : ROOM_H)) / 2));
+				return { x: pos.x + ox, y: pos.y + oy };
+			},
+			hitAt: hitAt,
+			// A snapshot of where things stand (room, explored rooms, the map, enemies in this room)
+			state: function(){
+				return {
+					room: current,
+					visited: Object.keys(visited),
+					mapFound: mapFound,
+					opened: Object.keys(opened),
+					origin: { x: ox, y: oy },
+					enemies: (enemies[current] || []).map(function(e){ return { kind: e.kind, x: Math.round(e.x), y: Math.round(e.y), state: e.state, hp: e.hp }; })
+				};
+			}
+		};
+	})();
+
+	// ---- Scene menu (for trying scenes out while the game is in development) ----
+	var sceneSelect = document.getElementById("sceneSelect");
+	var currentScene = "dojo";
+	var sceneVersion = 0;   // goes up on every scene change
+
+	// Coming back from the trailer with the browser's Back button: show the scene that's actually on
+	window.addEventListener("pageshow", function(){
+		sceneSelect.value = currentScene;
+	});
+
+	// name: "map", "dungeon", "dojo" or "forest". fromScene: the scene being left, so the village map can
+	// put the ninja next to the way back into it.
+	function chooseScene(name, fromScene){
+		currentScene = name;
+		sceneVersion++;
+		sceneSelect.value = name;
+		carryX = carryY = 0;
+		document.getElementById("minimap").hidden = name !== "dungeon";
+		if (name === "map" || name === "dungeon") {
+			mapMode = true;
+			var world = name === "dungeon" ? dungeon : worldMap;
+			scene.setRenderer(world.render);
+			music.setSong(name === "dungeon" ? "dungeon" : "village");
+			var spawn = world.spawn(fromScene);
+			mapPos.x = spawn.x;
+			mapPos.y = spawn.y;
+			placeOnMap();
+		} else {
+			mapMode = false;
+			scene.setRenderer(null);
+			scene.setTheme(name);
+			music.setSong(name);
+			// Start the scene back at the beginning of its world
+			worldX = Math.round(window.innerWidth * 0.3);
+			ninjaImg.style.top = scene.groundTop() + 'px';
+			placeNinja();
+		}
+		try { localStorage.setItem("ninjaScene", name); } catch (e) {}
+	}
+
+	sceneSelect.addEventListener("change", function(){
+		// The trailer is its own page
+		if (sceneSelect.value === "trailer") {
+			location.href = "trailer.html";
+			return;
+		}
+		chooseScene(sceneSelect.value);
+		music.start();
+		// Hand the keyboard back to the game
+		sceneSelect.blur();
+	});
+
+	try {
+		var savedScene = localStorage.getItem("ninjaScene");
+		if (savedScene && sceneSelect.querySelector('option[value="' + savedScene + '"]')) {
+			sceneSelect.value = savedScene;
+			chooseScene(savedScene);
+		}
+	} catch (e) {}
+
+	// ---- Oni Ronin: a lone decoy early in the Moonlit Bamboo Forest, then the real fight ----
+	// Past the thugs, three ronin attack at once. While any are still standing, another arrives every
+	// few seconds (up to five at a time), so it pays to beat them quickly. Each one stalks the ninja
+	// and slashes when close, but can't spot a ninja in stealth.
+	var ronins = (function(){
+		var bar = document.getElementById("bossBar");
+		var barName = document.getElementById("bossName");
+		var meter = document.getElementById("bossHealth");
+		var CELL_W = 80, TORSO = 32.5, FEET = 61;          // sprite cell width, torso column, feet row
+		var MAX_HP = 5, SPEED = 55, REACH = 64, HIT_WIDTH = 42, SPACING = 56;
+		var FRAMES = { idle: 0, slash: 1, hurt: 2 };
+		// Where each fight starts (in screen widths from the start of the forest) and where its ronin
+		// appear (in screen widths from the ninja: ahead is positive, behind negative)
+		var ENCOUNTERS = [
+			{ at: 1.2, spawns: [0.4], reinforce: false },
+			{ at: 4.2, spawns: [0.35, 0.5, -0.4], reinforce: true }
+		];
+		var REINFORCE_SECONDS = 9, MAX_AT_ONCE = 5, VICTORY_STARS = 5;
+		var list = [], nextEncounter = 0, battle = null, lastSceneVersion = -1, last = performance.now();
+
+		function standing(r){ return r.state !== "defeated" && r.state !== "gone"; }
+		function canBeHit(r){ return standing(r) && r.state !== "appearing"; }
+		function top(){ return scene.groundTop() + 48 - FEET; }
+		function ninjaHidden(){ return ninjaOpacity < 0.4; }
+
+		function setState(r, state){
+			r.state = state;
+			r.stateTime = 0;
+		}
+
+		function reset(){
+			list.forEach(function(r){
+				r.el.remove();
+				r.hpEl.remove();
+			});
+			list = [];
+			nextEncounter = 0;
+			battle = null;
+			bar.hidden = true;
+		}
+
+		function spawn(x){
+			var el = document.createElement("div");
+			el.className = "ronin";
+			var hpEl = document.createElement("div");
+			hpEl.className = "ronin-hp";
+			var hpFill = document.createElement("div");
+			hpEl.appendChild(hpFill);
+			document.body.appendChild(el);
+			document.body.appendChild(hpEl);
+			var r = { el: el, hpEl: hpEl, hpFill: hpFill, x: x, hp: MAX_HP, facing: -1, state: "appearing", stateTime: 0, invulnerableUntil: 0, spin: 0, fade: 0 };
+			list.push(r);
+			scene.puff(x - scene.camera(), top() + 30);
+		}
+
+		function startBattle(encounter){
+			battle = { encounter: encounter, reinforceTimer: REINFORCE_SECONDS };
+			encounter.spawns.forEach(function(offset){ spawn(worldX + 23 + offset * window.innerWidth); });
+			music.setSong("boss");
+		}
+
+		function endBattle(){
+			if (battle.encounter.reinforce) scene.dropStars(window.innerWidth / 2, top() + 10, VICTORY_STARS);
+			battle = null;
+			music.jingle();
+			setTimeout(function(){
+				if (!battle && currentScene === "forest" && !mapMode) music.setSong("forest");
+			}, 1500);
+		}
+
+		function defeat(r){
+			setState(r, "defeated");
+			var sx = r.x - scene.camera();
+			scene.puff(sx, top() + 30);
+			// The lone decoy drops a handful of stars; each clan ronin drops one to keep the fight going
+			if (battle && battle.encounter.reinforce) scene.dropItem(sx, top() + 30, "star");
+			else scene.dropStars(sx, top() + 30, 5);
+		}
+
+		// An attack of the given damage landed at screen point (px, py); returns true if it struck a ronin
+		function hitAt(px, py, damage){
+			var cam = scene.camera(), t = top(), now = performance.now();
+			for (var i = 0; i < list.length; i++) {
+				var r = list[i], sx = r.x - cam;
+				if (!canBeHit(r) || now < r.invulnerableUntil) continue;
+				if (Math.abs(px - sx) > HIT_WIDTH || py < t + 4 || py > t + FEET + 4) continue;
+				r.hp -= damage || 1;
+				r.invulnerableUntil = now + 300;
+				r.x += (px < sx ? 1 : -1) * 24;
+				if (r.hp <= 0) defeat(r);
+				else setState(r, "hurt");
+				return true;
+			}
+			return false;
+		}
+
+		function update(r, dt){
+			r.stateTime += dt;
+			var gap = worldX + 23 - r.x, dist = Math.abs(gap), toward = gap < 0 ? -1 : 1;
+			if (r.state === "appearing") {
+				r.facing = toward;
+				r.fade = Math.min(1, r.stateTime / 0.5);
+				if (r.stateTime > 0.8) setState(r, "stalk");
+			} else if (r.state === "stalk") {
+				if (ninjaHidden()) {
+					// Can't see the ninja: stop and look around
+					r.facing = Math.floor(r.stateTime / 0.8) % 2 ? 1 : -1;
+				} else {
+					r.facing = toward;
+					if (dist > REACH) r.x += toward * SPEED * dt;
+					else setState(r, "windup");
+				}
+			} else if (r.state === "windup") {
+				r.facing = toward;
+				if (r.stateTime > 0.45) {
+					setState(r, "slash");
+					sfx.blip(900, 200, 0.18);
+					if (!ninjaHidden() && !airborne && dist < REACH + 20) knockBackNinja(r.x);
+				}
+			} else if (r.state === "slash") {
+				if (r.stateTime > 0.35) setState(r, "recover");
+			} else if (r.state === "recover") {
+				if (r.stateTime > 0.6) setState(r, "stalk");
+			} else if (r.state === "hurt") {
+				if (r.stateTime > 0.35) setState(r, "stalk");
+			} else if (r.state === "defeated") {
+				r.spin += dt * 9;
+				r.fade = Math.max(0, 1 - r.stateTime / 0.9);
+				r.x -= toward * 120 * dt;
+				if (r.stateTime > 1) setState(r, "gone");
+			}
+		}
+
+		// Keep ronin from standing on top of each other
+		function spreadOut(){
+			var group = list.filter(function(r){ return r.state === "stalk" || r.state === "appearing"; });
+			for (var i = 0; i < group.length; i++) {
+				for (var j = i + 1; j < group.length; j++) {
+					var a = group[i], b = group[j], gap = b.x - a.x;
+					if (Math.abs(gap) < SPACING) {
+						var push = (SPACING - Math.abs(gap)) / 2 * (gap < 0 ? -1 : 1);
+						a.x -= push;
+						b.x += push;
+					}
+				}
+			}
+		}
+
+		function draw(r){
+			var visible = r.state !== "gone";
+			r.el.style.display = visible ? "block" : "none";
+			r.hpEl.style.display = visible && canBeHit(r) ? "block" : "none";
+			if (!visible) return;
+			var sx = r.x - scene.camera(), t = top();
+			var frame = r.state === "slash" ? FRAMES.slash : (r.state === "hurt" || r.state === "defeated") ? FRAMES.hurt : FRAMES.idle;
+			var bob = r.state === "stalk" && !ninjaHidden() ? -Math.abs(Math.sin(r.stateTime * 8)) * 2 : 0;
+			r.el.style.backgroundPosition = (-frame * CELL_W) + "px 0px";
+			r.el.style.left = Math.round(sx - (r.facing < 0 ? CELL_W - TORSO : TORSO)) + "px";
+			r.el.style.top = Math.round(t + bob) + "px";
+			r.el.style.transform = (r.facing < 0 ? "scaleX(-1)" : "") + (r.spin ? " rotate(" + r.spin + "rad)" : "");
+			r.el.style.opacity = r.fade;
+			r.hpEl.style.left = Math.round(sx - 22) + "px";
+			r.hpEl.style.top = Math.round(t - 10) + "px";
+			r.hpFill.style.width = (Math.max(0, r.hp) / MAX_HP * 100) + "%";
+		}
+
+		// The bar at the top: the lone ronin's health, or the clan's size and the time until the next arrives
+		function updateBar(){
+			bar.hidden = !battle;
+			if (!battle) return;
+			var up = list.filter(standing);
+			if (battle.encounter.reinforce) {
+				barName.textContent = "Oni Ronin \u00d7" + up.length;
+				meter.className = "reinforce";
+				meter.title = "Another ronin arrives when this runs out";
+				meter.style.width = (up.length >= MAX_AT_ONCE ? 0 : battle.reinforceTimer / REINFORCE_SECONDS * 100) + "%";
+			} else {
+				barName.textContent = "Oni Ronin";
+				meter.className = "";
+				meter.title = "";
+				meter.style.width = (up.length ? Math.max(0, up[0].hp) / MAX_HP * 100 : 0) + "%";
+			}
+		}
+
+		(function tick(now){
+			var dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
+			last = now;
+
+			// Leaving or re-entering a scene resets the forest's fights
+			if (sceneVersion !== lastSceneVersion) {
+				lastSceneVersion = sceneVersion;
+				reset();
+			}
+			if (mapMode || currentScene !== "forest") {
+				requestAnimationFrame(tick);
+				return;
+			}
+
+			if (!battle && nextEncounter < ENCOUNTERS.length && worldX > ENCOUNTERS[nextEncounter].at * window.innerWidth) {
+				startBattle(ENCOUNTERS[nextEncounter++]);
+			}
+
+			list.forEach(function(r){ update(r, dt); });
+			spreadOut();
+
+			if (battle) {
+				var up = list.filter(standing).length;
+				if (up === 0) {
+					endBattle();
+				} else if (battle.encounter.reinforce) {
+					battle.reinforceTimer -= dt;
+					if (battle.reinforceTimer <= 0) {
+						battle.reinforceTimer = REINFORCE_SECONDS;
+						// Reinforcements run in from just off one side of the screen
+						if (up < MAX_AT_ONCE) spawn(worldX + 23 + (Math.random() < 0.5 ? -1 : 1) * window.innerWidth * 0.55);
+					}
+				}
+			}
+
+			list.forEach(draw);
+			// Clear away ronin that have finished fading out
+			list = list.filter(function(r){
+				if (r.state !== "gone") return true;
+				r.el.remove();
+				r.hpEl.remove();
+				return false;
+			});
+			updateBar();
+			requestAnimationFrame(tick);
+		})(last);
+
+		return {
+			hitAt: hitAt,
+			// How many ronin are still standing
+			standing: function(){ return list.filter(standing).length; }
+		};
+	})();
+
+	// Knocks the ninja back, away from an attacker at world x (no damage, just a shove and a flash)
+	function knockBackNinja(attackerX){
+		var dir = worldX + 23 < attackerX ? -1 : 1;
+		var box = ninjaImg.getBoundingClientRect();
+		scene.hit(box.left + box.width / 2, box.top + box.height / 2);
+		sfx.blip(320, 110, 0.25);
+		// Slide 60px back over a fifth of a second
+		var start = performance.now(), pushed = 0;
+		(function push(now){
+			if (mapMode) return;
+			var target = Math.round(60 * Math.min(1, (now - start) / 200));
+			moveNinjaBy(dir * (target - pushed));
+			pushed = target;
+			if (pushed < 60) requestAnimationFrame(push);
+		})(start);
+	}
+
+	// ---- Thugs: knife-carrying goons patrolling the path in the side-scrolling scenes ----
+	// They turn around with an "Eh?" when they hear the ninja running behind them, and shout "!" when
+	// they spot it, which sends every thug on screen rushing in. Stealth hides the ninja from their
+	// eyes but not their ears. One hit knocks a thug out; some drop a knife.
+	var THUG_SPOTS = {
+		// x: where each thug starts, in screen widths from the start of the world
+		dojo: [
+			{ x: 1.35, facing: -1, knife: true },
+			{ x: 1.9, facing: 1 },
+			{ x: 2.15, facing: -1, knife: true },
+			{ x: 3.0, facing: 1 },
+			{ x: 3.6, facing: -1, knife: true }
+		],
+		forest: [
+			{ x: 2.3, facing: -1, knife: true },
+			{ x: 2.9, facing: 1 },
+			{ x: 3.4, facing: -1, knife: true }
+		]
+	};
+	var THUG_W = 64, THUG_TORSO = 30, THUG_FEET = 54;      // sprite cell width, torso column, feet row
+	var THUG_FRAMES = { idle: 0, walk1: 1, walk2: 2, thrust: 3, hurt: 4 };
+	var THUG_WALK = 30, THUG_RUSH = 150, THUG_REACH = 44;
+	// How far a thug facing the ninja can see it: further in daylight, much less at night.
+	// Hearing (a running ninja) reaches the same distance in either.
+	var THUG_SIGHT = { dojo: 460, forest: 220 }, THUG_HEARING = 380;
+	var thugs = [], thugSceneVersion = -1, thugLast = performance.now();
+
+	function setupThugs(){
+		thugs.forEach(function(t){
+			t.el.remove();
+			t.bubble.remove();
+		});
+		thugs = [];
+		var spots = !mapMode && THUG_SPOTS[currentScene];
+		if (!spots) return;
+		spots.forEach(function(spot){
+			var el = document.createElement("div");
+			el.className = "thug";
+			var bubble = document.createElement("div");
+			bubble.className = "speech";
+			bubble.hidden = true;
+			document.body.appendChild(el);
+			document.body.appendChild(bubble);
+			var x = spot.x * window.innerWidth;
+			thugs.push({ el: el, bubble: bubble, x: x, home: x, facing: spot.facing, knife: !!spot.knife, state: "patrol", stateTime: 0, noiseDir: 1, bubbleUntil: 0, fall: 0, fade: 1 });
+		});
+	}
+
+	function setThugState(t, state){
+		t.state = state;
+		t.stateTime = 0;
+	}
+
+	function say(t, text, alert, seconds){
+		t.bubble.textContent = text;
+		t.bubble.className = alert ? "speech alert" : "speech";
+		t.bubble.hidden = false;
+		t.bubbleUntil = performance.now() + seconds * 1000;
+	}
+
+	function thugUp(t){ return t.state !== "down" && t.state !== "gone"; }
+
+	function thugTop(){ return scene.groundTop() + 48 - THUG_FEET; }
+
+	// Every thug on screen that isn't already fighting rushes at the ninja
+	function alertThugs(){
+		var cam = scene.camera();
+		thugs.forEach(function(t){
+			var sx = t.x - cam;
+			if (!thugUp(t) || sx < -80 || sx > window.innerWidth + 80) return;
+			if (t.state === "alert" || t.state === "rush" || t.state === "windup" || t.state === "thrust" || t.state === "recover") return;
+			setThugState(t, "alert");
+			t.stateTime = -Math.random() * 0.25;   // a slightly staggered reaction
+			say(t, "!", true, 0.9);
+		});
+	}
+
+	function knockOutThug(t, pushDir){
+		setThugState(t, "down");
+		t.x += pushDir * 20;
+		t.bubble.hidden = true;
+		var sx = t.x - scene.camera();
+		if (t.knife) scene.dropItem(sx, thugTop() + 30, "knife");
+		// The commotion makes nearby thugs turn around to look
+		thugs.forEach(function(other){
+			if (other === t || !thugUp(other) || Math.abs(other.x - t.x) > THUG_HEARING) return;
+			if (other.state === "patrol" || other.state === "idle" || other.state === "lost") {
+				other.noiseDir = t.x < other.x ? -1 : 1;
+				setThugState(other, "heard");
+				say(other, "Eh?", false, 1);
+			}
+		});
+	}
+
+	// An attack of the given damage landed at screen point (px, py): knocks out a thug there, or
+	// hurts the Oni Ronin. Returns true if it hit anyone.
+	function hitEnemiesAt(px, py, damage){
+		if (currentScene === "dungeon") return dungeon.hitAt(px, py, damage);
+		var cam = scene.camera(), top = thugTop();
+		for (var i = 0; i < thugs.length; i++) {
+			var t = thugs[i];
+			if (!thugUp(t)) continue;
+			var sx = t.x - cam;
+			if (Math.abs(px - sx) <= 34 && py >= top && py <= top + THUG_FEET + 4) {
+				knockOutThug(t, px < sx ? 1 : -1);
+				return true;
+			}
+		}
+		return ronins.hitAt(px, py, damage);
+	}
+
+	// Thrown stars and knives hit enemies too (a knife counts double)
+	scene.onThrownMove(function(sx, sy, kind){
+		if (!hitEnemiesAt(sx, sy, kind === "knife" ? 2 : 1)) return false;
+		sfx.blip(2400, 1600, 0.06);
+		return true;
+	});
+
+	function drawThug(t, cam, now){
+		var sx = t.x - cam, top = thugTop();
+		var onScreen = sx > -120 && sx < window.innerWidth + 120 && t.state !== "gone";
+		t.el.style.display = onScreen ? "block" : "none";
+		if (!onScreen) {
+			t.bubble.hidden = true;
+			return;
+		}
+		var frame = THUG_FRAMES.idle;
+		if (t.state === "patrol") frame = Math.floor(t.stateTime * 5) % 2 ? THUG_FRAMES.walk1 : THUG_FRAMES.walk2;
+		else if (t.state === "rush") frame = Math.floor(t.stateTime * 10) % 2 ? THUG_FRAMES.walk1 : THUG_FRAMES.walk2;
+		else if (t.state === "thrust") frame = THUG_FRAMES.thrust;
+		else if (t.state === "down") frame = THUG_FRAMES.hurt;
+		t.el.style.backgroundPosition = (-frame * THUG_W) + "px 0px";
+		t.el.style.left = Math.round(sx - (t.facing < 0 ? THUG_W - THUG_TORSO : THUG_TORSO)) + "px";
+		t.el.style.top = Math.round(top) + "px";
+		t.el.style.transform = (t.facing < 0 ? "scaleX(-1)" : "") + (t.fall ? " rotate(" + (-90 * t.fall) + "deg)" : "");
+		t.el.style.opacity = t.fade;
+		if (now < t.bubbleUntil && t.state !== "down") {
+			t.bubble.hidden = false;
+			t.bubble.style.left = Math.round(sx) + "px";
+			t.bubble.style.top = Math.round(top - 26) + "px";
+		} else {
+			t.bubble.hidden = true;
+		}
+	}
+
+	(function thugTick(now){
+		var dt = Math.max(0, Math.min(0.05, (now - thugLast) / 1000));
+		thugLast = now;
+		if (sceneVersion !== thugSceneVersion) {
+			thugSceneVersion = sceneVersion;
+			setupThugs();
+		}
+		if (thugs.length) {
+			var cam = scene.camera(), ninjaX = worldX + 23;
+			var ninjaVisible = ninjaOpacity >= 0.4;
+			// Running makes noise; walking (and hanging in the air) doesn't
+			var noisy = running && !airborne && !stealthHeld && !!(heldArrows[37] || heldArrows[39]);
+			var spotted = false;
+			thugs.forEach(function(t){
+				t.stateTime += dt;
+				var gap = ninjaX - t.x, dist = Math.abs(gap), toward = gap < 0 ? -1 : 1;
+				var sx = t.x - cam, onScreen = sx > -80 && sx < window.innerWidth + 80;
+				var sees = ninjaVisible && onScreen && t.facing === toward && dist < (THUG_SIGHT[currentScene] || 400);
+				var unaware = t.state === "patrol" || t.state === "idle" || t.state === "lost";
+
+				if (unaware || t.state === "heard" || t.state === "look") {
+					if (sees) spotted = true;
+					else if (unaware && noisy && dist < THUG_HEARING && t.facing !== toward) {
+						t.noiseDir = toward;
+						setThugState(t, "heard");
+						say(t, "Eh?", false, 1);
+					}
+				}
+
+				if (t.state === "patrol") {
+					t.x += t.facing * THUG_WALK * dt;
+					if (t.x > t.home + 90) t.facing = -1;
+					else if (t.x < t.home - 90) t.facing = 1;
+					if (t.stateTime > 2.6) setThugState(t, "idle");
+				} else if (t.state === "idle") {
+					if (t.stateTime > 1.6) {
+						t.facing = -t.facing;
+						setThugState(t, "patrol");
+					}
+				} else if (t.state === "heard") {
+					// A moment of confusion, then turn toward the noise
+					if (t.stateTime > 0.45) {
+						t.facing = t.noiseDir;
+						setThugState(t, "look");
+					}
+				} else if (t.state === "look") {
+					if (t.stateTime > 1.4) setThugState(t, "patrol");
+				} else if (t.state === "alert") {
+					t.facing = toward;
+					if (t.stateTime > 0.35) setThugState(t, "rush");
+				} else if (t.state === "rush") {
+					if (!ninjaVisible) {
+						say(t, "?", false, 1.2);
+						t.home = t.x;
+						setThugState(t, "lost");
+					} else {
+						t.facing = toward;
+						if (dist > THUG_REACH) t.x += toward * THUG_RUSH * dt;
+						else setThugState(t, "windup");
+					}
+				} else if (t.state === "windup") {
+					t.facing = toward;
+					if (t.stateTime > 0.3) {
+						setThugState(t, "thrust");
+						if (ninjaVisible && !airborne && dist < THUG_REACH + 20) knockBackNinja(t.x);
+					}
+				} else if (t.state === "thrust") {
+					if (t.stateTime > 0.3) setThugState(t, "recover");
+				} else if (t.state === "recover") {
+					if (t.stateTime > 0.6) setThugState(t, "rush");
+				} else if (t.state === "lost") {
+					if (t.stateTime > 1.6) setThugState(t, "patrol");
+				} else if (t.state === "down") {
+					// Fall over backwards, lie there a moment, then fade away
+					t.fall = Math.min(1, t.stateTime / 0.35);
+					t.fade = t.stateTime < 0.9 ? 1 : Math.max(0, 1 - (t.stateTime - 0.9) / 0.9);
+					if (t.stateTime > 1.8) setThugState(t, "gone");
+				}
+				drawThug(t, cam, now);
+			});
+			if (spotted) alertThugs();
+		}
+		requestAnimationFrame(thugTick);
+	})(thugLast);
+</script>
+</html>
