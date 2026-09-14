@@ -157,13 +157,28 @@ html, body {
   cursor: pointer;
 }
 
-#villain {
+.ronin {
   position: absolute;
   width: 80px;
   height: 64px;
   background: url(Resources/Images/Villain_Sprites.png) 0 0;
   display: none;
   pointer-events: none;
+}
+
+.ronin-hp {
+  position: absolute;
+  width: 44px;
+  height: 5px;
+  background: rgba(20, 0, 8, 0.7);
+  border-radius: 3px;
+  overflow: hidden;
+  display: none;
+  pointer-events: none;
+}
+.ronin-hp div {
+  height: 100%;
+  background: #ff4a3a;
 }
 
 #bossBar {
@@ -200,6 +215,11 @@ html, body {
   background: #ff4a3a;
   transition: width 0.2s;
 }
+/* During the clan fight the meter counts down to the next ronin's arrival */
+#bossHealth.reinforce {
+  background: #ffb43a;
+  transition: none;
+}
 
 #moves {
   position: absolute;
@@ -218,7 +238,6 @@ html, body {
 	<img id="ninja" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
 <div id="moves"></div>
-<div id="villain"></div>
 <div class="imgContainer">
 	<img id="pow" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
@@ -232,7 +251,7 @@ html, body {
 		<option value="trailer">&#127916; Trailer (3D video)</option>
 	</select>
 </label>
-<div id="bossBar" hidden><span>Oni Ronin</span><div class="meter"><div id="bossHealth"></div></div></div>
+<div id="bossBar" hidden><span id="bossName">Oni Ronin</span><div class="meter"><div id="bossHealth"></div></div></div>
 <div id="hint">&larr; &rarr;: walk &middot; Shift: run &middot; Space: jump (hold an arrow to jump sideways) &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; attack mid-jump &middot; kick the gate for ninja stars, T: throw &middot; beaten thugs may drop knives: E thrust, Q throw &middot; hold S: stealth &middot; other keys: punch &middot; walk left from a scene's start: village map</div>
 </body>
 
@@ -2401,80 +2420,195 @@ html, body {
 		}
 	} catch (e) {}
 
-	// ---- The Oni Ronin: a villain lurking deep in the Moonlit Bamboo Forest ----
-	// Walk far enough into the forest and it appears (with boss music). It stalks the ninja and
-	// slashes when close, but it can't see a ninja in stealth. Five hits defeat it.
-	var villain = (function(){
-		var el = document.getElementById("villain");
+	// ---- Oni Ronin: a lone decoy early in the Moonlit Bamboo Forest, then the real fight ----
+	// Past the thugs, three ronin attack at once. While any are still standing, another arrives every
+	// few seconds (up to five at a time), so it pays to beat them quickly. Each one stalks the ninja
+	// and slashes when close, but can't spot a ninja in stealth.
+	var ronins = (function(){
 		var bar = document.getElementById("bossBar");
-		var healthEl = document.getElementById("bossHealth");
+		var barName = document.getElementById("bossName");
+		var meter = document.getElementById("bossHealth");
 		var CELL_W = 80, TORSO = 32.5, FEET = 61;          // sprite cell width, torso column, feet row
-		var MAX_HP = 5, SPEED = 55, REACH = 64, HIT_WIDTH = 42;
+		var MAX_HP = 5, SPEED = 55, REACH = 64, HIT_WIDTH = 42, SPACING = 56;
 		var FRAMES = { idle: 0, slash: 1, hurt: 2 };
-		var state = "waiting", stateTime = 0, x = 0, hp = MAX_HP, facing = -1, invulnerableUntil = 0, spin = 0, fade = 1;
-		var lastSceneVersion = -1, last = performance.now();
+		// Where each fight starts (in screen widths from the start of the forest) and where its ronin
+		// appear (in screen widths from the ninja: ahead is positive, behind negative)
+		var ENCOUNTERS = [
+			{ at: 1.2, spawns: [0.4], reinforce: false },
+			{ at: 4.2, spawns: [0.35, 0.5, -0.4], reinforce: true }
+		];
+		var REINFORCE_SECONDS = 9, MAX_AT_ONCE = 5, VICTORY_STARS = 5;
+		var list = [], nextEncounter = 0, battle = null, lastSceneVersion = -1, last = performance.now();
 
-		function setState(next){
-			state = next;
-			stateTime = 0;
+		function standing(r){ return r.state !== "defeated" && r.state !== "gone"; }
+		function canBeHit(r){ return standing(r) && r.state !== "appearing"; }
+		function top(){ return scene.groundTop() + 48 - FEET; }
+		function ninjaHidden(){ return ninjaOpacity < 0.4; }
+
+		function setState(r, state){
+			r.state = state;
+			r.stateTime = 0;
 		}
 
 		function reset(){
-			setState("waiting");
-			hp = MAX_HP;
-			invulnerableUntil = 0;
-			el.style.display = "none";
+			list.forEach(function(r){
+				r.el.remove();
+				r.hpEl.remove();
+			});
+			list = [];
+			nextEncounter = 0;
+			battle = null;
 			bar.hidden = true;
 		}
 
-		function screenX(){ return x - scene.camera(); }
-		// Top of the villain image with its feet on the path
-		function top(){ return scene.groundTop() + 48 - FEET; }
-		function ninjaCenter(){ return worldX + 23; }
-		function ninjaHidden(){ return ninjaOpacity < 0.4; }
-		function active(){ return state !== "waiting" && state !== "appearing" && state !== "defeated" && state !== "gone"; }
-
-		function draw(frame){
-			var sx = screenX();
-			el.style.display = "block";
-			el.style.backgroundPosition = (-frame * CELL_W) + "px 0px";
-			el.style.left = Math.round(sx - (facing < 0 ? CELL_W - TORSO : TORSO)) + "px";
-			var bob = state === "stalk" && !ninjaHidden() ? -Math.abs(Math.sin(stateTime * 8)) * 2 : 0;
-			el.style.top = Math.round(top() + bob) + "px";
-			el.style.transform = (facing < 0 ? "scaleX(-1)" : "") + (spin ? " rotate(" + spin + "rad)" : "");
-			el.style.opacity = fade;
+		function spawn(x){
+			var el = document.createElement("div");
+			el.className = "ronin";
+			var hpEl = document.createElement("div");
+			hpEl.className = "ronin-hp";
+			var hpFill = document.createElement("div");
+			hpEl.appendChild(hpFill);
+			document.body.appendChild(el);
+			document.body.appendChild(hpEl);
+			var r = { el: el, hpEl: hpEl, hpFill: hpFill, x: x, hp: MAX_HP, facing: -1, state: "appearing", stateTime: 0, invulnerableUntil: 0, spin: 0, fade: 0 };
+			list.push(r);
+			scene.puff(x - scene.camera(), top() + 30);
 		}
 
-		function defeat(){
-			setState("defeated");
-			scene.puff(screenX(), top() + 30);
-			scene.dropStars(screenX(), top() + 30, 5);
+		function startBattle(encounter){
+			battle = { encounter: encounter, reinforceTimer: REINFORCE_SECONDS };
+			encounter.spawns.forEach(function(offset){ spawn(worldX + 23 + offset * window.innerWidth); });
+			music.setSong("boss");
+		}
+
+		function endBattle(){
+			if (battle.encounter.reinforce) scene.dropStars(window.innerWidth / 2, top() + 10, VICTORY_STARS);
+			battle = null;
 			music.jingle();
 			setTimeout(function(){
-				if (currentScene === "forest" && !mapMode && state === "gone") music.setSong("forest");
+				if (!battle && currentScene === "forest" && !mapMode) music.setSong("forest");
 			}, 1500);
 		}
 
-		// An attack of the given damage landed at screen point (px, py); returns true if it struck the villain
+		function defeat(r){
+			setState(r, "defeated");
+			var sx = r.x - scene.camera();
+			scene.puff(sx, top() + 30);
+			// The lone decoy drops a handful of stars; each clan ronin drops one to keep the fight going
+			if (battle && battle.encounter.reinforce) scene.dropItem(sx, top() + 30, "star");
+			else scene.dropStars(sx, top() + 30, 5);
+		}
+
+		// An attack of the given damage landed at screen point (px, py); returns true if it struck a ronin
 		function hitAt(px, py, damage){
-			if (!active() || performance.now() < invulnerableUntil) return false;
-			var sx = screenX(), t = top();
-			if (Math.abs(px - sx) > HIT_WIDTH || py < t + 4 || py > t + FEET + 4) return false;
-			hp -= damage || 1;
-			invulnerableUntil = performance.now() + 300;
-			healthEl.style.width = (Math.max(0, hp) / MAX_HP * 100) + "%";
-			x += (px < sx ? 1 : -1) * 24;
-			if (hp <= 0) defeat();
-			else setState("hurt");
-			return true;
+			var cam = scene.camera(), t = top(), now = performance.now();
+			for (var i = 0; i < list.length; i++) {
+				var r = list[i], sx = r.x - cam;
+				if (!canBeHit(r) || now < r.invulnerableUntil) continue;
+				if (Math.abs(px - sx) > HIT_WIDTH || py < t + 4 || py > t + FEET + 4) continue;
+				r.hp -= damage || 1;
+				r.invulnerableUntil = now + 300;
+				r.x += (px < sx ? 1 : -1) * 24;
+				if (r.hp <= 0) defeat(r);
+				else setState(r, "hurt");
+				return true;
+			}
+			return false;
+		}
+
+		function update(r, dt){
+			r.stateTime += dt;
+			var gap = worldX + 23 - r.x, dist = Math.abs(gap), toward = gap < 0 ? -1 : 1;
+			if (r.state === "appearing") {
+				r.facing = toward;
+				r.fade = Math.min(1, r.stateTime / 0.5);
+				if (r.stateTime > 0.8) setState(r, "stalk");
+			} else if (r.state === "stalk") {
+				if (ninjaHidden()) {
+					// Can't see the ninja: stop and look around
+					r.facing = Math.floor(r.stateTime / 0.8) % 2 ? 1 : -1;
+				} else {
+					r.facing = toward;
+					if (dist > REACH) r.x += toward * SPEED * dt;
+					else setState(r, "windup");
+				}
+			} else if (r.state === "windup") {
+				r.facing = toward;
+				if (r.stateTime > 0.45) {
+					setState(r, "slash");
+					sfx.blip(900, 200, 0.18);
+					if (!ninjaHidden() && !airborne && dist < REACH + 20) knockBackNinja(r.x);
+				}
+			} else if (r.state === "slash") {
+				if (r.stateTime > 0.35) setState(r, "recover");
+			} else if (r.state === "recover") {
+				if (r.stateTime > 0.6) setState(r, "stalk");
+			} else if (r.state === "hurt") {
+				if (r.stateTime > 0.35) setState(r, "stalk");
+			} else if (r.state === "defeated") {
+				r.spin += dt * 9;
+				r.fade = Math.max(0, 1 - r.stateTime / 0.9);
+				r.x -= toward * 120 * dt;
+				if (r.stateTime > 1) setState(r, "gone");
+			}
+		}
+
+		// Keep ronin from standing on top of each other
+		function spreadOut(){
+			var group = list.filter(function(r){ return r.state === "stalk" || r.state === "appearing"; });
+			for (var i = 0; i < group.length; i++) {
+				for (var j = i + 1; j < group.length; j++) {
+					var a = group[i], b = group[j], gap = b.x - a.x;
+					if (Math.abs(gap) < SPACING) {
+						var push = (SPACING - Math.abs(gap)) / 2 * (gap < 0 ? -1 : 1);
+						a.x -= push;
+						b.x += push;
+					}
+				}
+			}
+		}
+
+		function draw(r){
+			var visible = r.state !== "gone";
+			r.el.style.display = visible ? "block" : "none";
+			r.hpEl.style.display = visible && canBeHit(r) ? "block" : "none";
+			if (!visible) return;
+			var sx = r.x - scene.camera(), t = top();
+			var frame = r.state === "slash" ? FRAMES.slash : (r.state === "hurt" || r.state === "defeated") ? FRAMES.hurt : FRAMES.idle;
+			var bob = r.state === "stalk" && !ninjaHidden() ? -Math.abs(Math.sin(r.stateTime * 8)) * 2 : 0;
+			r.el.style.backgroundPosition = (-frame * CELL_W) + "px 0px";
+			r.el.style.left = Math.round(sx - (r.facing < 0 ? CELL_W - TORSO : TORSO)) + "px";
+			r.el.style.top = Math.round(t + bob) + "px";
+			r.el.style.transform = (r.facing < 0 ? "scaleX(-1)" : "") + (r.spin ? " rotate(" + r.spin + "rad)" : "");
+			r.el.style.opacity = r.fade;
+			r.hpEl.style.left = Math.round(sx - 22) + "px";
+			r.hpEl.style.top = Math.round(t - 10) + "px";
+			r.hpFill.style.width = (Math.max(0, r.hp) / MAX_HP * 100) + "%";
+		}
+
+		// The bar at the top: the lone ronin's health, or the clan's size and the time until the next arrives
+		function updateBar(){
+			bar.hidden = !battle;
+			if (!battle) return;
+			var up = list.filter(standing);
+			if (battle.encounter.reinforce) {
+				barName.textContent = "Oni Ronin \u00d7" + up.length;
+				meter.className = "reinforce";
+				meter.title = "Another ronin arrives when this runs out";
+				meter.style.width = (up.length >= MAX_AT_ONCE ? 0 : battle.reinforceTimer / REINFORCE_SECONDS * 100) + "%";
+			} else {
+				barName.textContent = "Oni Ronin";
+				meter.className = "";
+				meter.title = "";
+				meter.style.width = (up.length ? Math.max(0, up[0].hp) / MAX_HP * 100 : 0) + "%";
+			}
 		}
 
 		(function tick(now){
 			var dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
 			last = now;
-			stateTime += dt;
 
-			// Leaving or re-entering a scene puts the villain back in hiding
+			// Leaving or re-entering a scene resets the forest's fights
 			if (sceneVersion !== lastSceneVersion) {
 				lastSceneVersion = sceneVersion;
 				reset();
@@ -2484,62 +2618,44 @@ html, body {
 				return;
 			}
 
-			var gap = ninjaCenter() - x, dist = Math.abs(gap), toward = gap < 0 ? -1 : 1;
-			if (state === "waiting") {
-				if (worldX > window.innerWidth * 1.2) {
-					x = ninjaCenter() + window.innerWidth * 0.4;
-					facing = -1;
-					fade = 0;
-					spin = 0;
-					healthEl.style.width = "100%";
-					bar.hidden = false;
-					setState("appearing");
-					scene.puff(screenX(), top() + 30);
-					music.setSong("boss");
-				}
-			} else if (state === "appearing") {
-				fade = Math.min(1, stateTime / 0.5);
-				if (stateTime > 0.8) setState("stalk");
-			} else if (state === "stalk") {
-				if (ninjaHidden()) {
-					// Can't see the ninja: stop and look around
-					facing = Math.floor(stateTime / 0.8) % 2 ? 1 : -1;
-				} else {
-					facing = toward;
-					if (dist > REACH) x += toward * SPEED * dt;
-					else setState("windup");
-				}
-			} else if (state === "windup") {
-				facing = toward;
-				if (stateTime > 0.45) {
-					setState("slash");
-					sfx.blip(900, 200, 0.18);
-					if (!ninjaHidden() && !airborne && dist < REACH + 20) knockBackNinja(x);
-				}
-			} else if (state === "slash") {
-				if (stateTime > 0.35) setState("recover");
-			} else if (state === "recover") {
-				if (stateTime > 0.6) setState("stalk");
-			} else if (state === "hurt") {
-				if (stateTime > 0.35) setState("stalk");
-			} else if (state === "defeated") {
-				spin += dt * 9;
-				fade = Math.max(0, 1 - stateTime / 0.9);
-				x -= toward * 120 * dt;
-				if (stateTime > 1) {
-					setState("gone");
-					el.style.display = "none";
-					bar.hidden = true;
+			if (!battle && nextEncounter < ENCOUNTERS.length && worldX > ENCOUNTERS[nextEncounter].at * window.innerWidth) {
+				startBattle(ENCOUNTERS[nextEncounter++]);
+			}
+
+			list.forEach(function(r){ update(r, dt); });
+			spreadOut();
+
+			if (battle) {
+				var up = list.filter(standing).length;
+				if (up === 0) {
+					endBattle();
+				} else if (battle.encounter.reinforce) {
+					battle.reinforceTimer -= dt;
+					if (battle.reinforceTimer <= 0) {
+						battle.reinforceTimer = REINFORCE_SECONDS;
+						// Reinforcements run in from just off one side of the screen
+						if (up < MAX_AT_ONCE) spawn(worldX + 23 + (Math.random() < 0.5 ? -1 : 1) * window.innerWidth * 0.55);
+					}
 				}
 			}
 
-			if (state !== "waiting" && state !== "gone") {
-				draw(state === "slash" ? FRAMES.slash : (state === "hurt" || state === "defeated") ? FRAMES.hurt : FRAMES.idle);
-			}
+			list.forEach(draw);
+			// Clear away ronin that have finished fading out
+			list = list.filter(function(r){
+				if (r.state !== "gone") return true;
+				r.el.remove();
+				r.hpEl.remove();
+				return false;
+			});
+			updateBar();
 			requestAnimationFrame(tick);
 		})(last);
 
-		return { hitAt: hitAt };
+		return {
+			hitAt: hitAt,
+			// How many ronin are still standing
+			standing: function(){ return list.filter(standing).length; }
+		};
 	})();
 
 	// Knocks the ninja back, away from an attacker at world x (no damage, just a shove and a flash)
@@ -2666,7 +2782,7 @@ html, body {
 				return true;
 			}
 		}
-		return villain.hitAt(px, py, damage);
+		return ronins.hitAt(px, py, damage);
 	}
 
 	// Thrown stars and knives hit enemies too (a knife counts double)
