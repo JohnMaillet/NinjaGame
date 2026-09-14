@@ -54,7 +54,8 @@ html, body {
   right: 0;
   text-align: center;
   font: 13px/1.2 "Segoe UI", system-ui, sans-serif;
-  color: rgba(70, 30, 45, 0.75);
+  color: #fff3de;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
   pointer-events: none;
 }
 
@@ -86,6 +87,30 @@ html, body {
   display: none;
 }
 
+#scenePicker {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 4px 6px 4px 14px;
+  font: 14px/1.2 "Segoe UI", system-ui, sans-serif;
+  color: #ffe8c2;
+  background: rgba(43, 27, 74, 0.75);
+  border: 1px solid rgba(255, 220, 180, 0.5);
+  border-radius: 999px;
+}
+#sceneSelect {
+  margin-left: 6px;
+  padding: 2px 8px;
+  font: inherit;
+  color: #2b1b4a;
+  background: #ffe8c2;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
 #moves {
   position: absolute;
   width: 64px;
@@ -108,26 +133,34 @@ html, body {
 </div>
 <button id="musicBtn" type="button">&#9835; Music: On</button>
 <div id="starCount" hidden></div>
+<label id="scenePicker">Scene:
+	<select id="sceneSelect">
+		<option value="dojo">Sunset Dojo</option>
+		<option value="forest">Moonlit Bamboo Forest</option>
+	</select>
+</label>
 <div id="hint">&larr; &rarr;: walk &middot; Shift: run &middot; Space: jump (hold an arrow to jump sideways) &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; attack mid-jump &middot; kick the gate for ninja stars, T: throw &middot; hold S: stealth &middot; other keys: punch</div>
 </body>
 
 <script>
-	// ---- Side-scrolling sunset dojo ----
+	// ---- Side-scrolling scenes ----
 	// The world scrolls sideways as the ninja walks, like an old side-scroller. Each layer moves at
-	// its own speed ("depth", where 1 = the path the ninja walks on): the sky stays put, mountains
-	// creep by, torii gates move faster, lanterns and bamboo beside the path faster still, and
-	// cherry trees and grass drawn in front of the ninja move fastest. That difference sells the depth.
+	// its own speed ("depth", where 1 = the path the ninja walks on): the sky stays put, distant
+	// layers creep by, props beside the path move faster, and the foreground (drawn on a second
+	// canvas, in front of the ninja) moves fastest. That difference sells the depth.
+	// Each scene in THEMES supplies its own colors, scenery layers, particles and foreground.
 	var scene = (function(){
 		var canvas = document.getElementById("scene");
 		var ctx = canvas.getContext("2d");
 		var frontCanvas = document.getElementById("front");
 		var fctx = frontCanvas.getContext("2d");
 		var ninja = document.getElementById("ninja");
-		var W, H, horizon, groundY, scale;
+		var W, H, horizon, groundY, scale, s;
 		var cameraX = 0, lastCameraX = 0;
-		var stars = [], clouds = [], petals = [], sparks = [], trees = [];
+		var stars = [], clouds = [], particles = [], sparks = [], trees = [];
 		var shuriken = [], thrown = [], collectHandler = null, gateShake = 0, lastGateKick = -1;
 		var flash = 0, shake = 0, time = 0, last = performance.now(), shadowY = null;
+		var theme;
 
 		function seeded(seed){
 			return function(){
@@ -162,19 +195,6 @@ html, body {
 			return shape;
 		}
 
-		function newPetal(rnd, anywhere){
-			return {
-				x: anywhere ? rnd() * W : W * (0.3 + rnd() * 0.8),
-				y: anywhere ? rnd() * H : -20 + rnd() * H * 0.4,
-				vx: -30 - rnd() * 40,
-				vy: 25 + rnd() * 35,
-				rot: rnd() * 6.28,
-				vr: -2 + rnd() * 4,
-				size: 3 + rnd() * 3,
-				sway: rnd() * 6.28
-			};
-		}
-
 		function sizeCanvas(c, context, dpr){
 			c.width = Math.round(W * dpr);
 			c.height = Math.round(H * dpr);
@@ -192,6 +212,7 @@ html, body {
 			horizon = H * 0.68;
 			groundY = H * 0.8;
 			scale = Math.min(W, H) / 800;
+			s = H / 900;
 
 			var rnd = seeded(7);
 			stars = [];
@@ -204,9 +225,6 @@ html, body {
 			}
 			if (trees.length === 0) {
 				for (var t = 0; t < 3; t++) trees.push(makeTree(11 + t * 17));
-			}
-			if (petals.length === 0) {
-				for (var p = 0; p < 50; p++) petals.push(newPetal(Math.random, true));
 			}
 		}
 
@@ -267,43 +285,44 @@ html, body {
 			ctx.restore();
 		}
 
-		function drawPagoda(x, baseY, s, color){
+		function drawPagoda(x, baseY, ps, color){
 			ctx.fillStyle = color;
 			// Mound so the pagoda never floats above a dip in the hills
-			ctx.fillRect(x - 34 * s, baseY, 68 * s, H * 0.06);
+			ctx.fillRect(x - 34 * ps, baseY, 68 * ps, H * 0.06);
 			var y = baseY;
 			for (var k = 0; k < 5; k++) {
-				var tw = (64 - k * 9) * s;
-				var bodyH = 13 * s;
-				var roofH = 7 * s;
+				var tw = (64 - k * 9) * ps;
+				var bodyH = 13 * ps;
+				var roofH = 7 * ps;
 				ctx.fillRect(x - tw * 0.3, y - bodyH, tw * 0.6, bodyH);
 				ctx.beginPath();
-				ctx.moveTo(x - tw / 2 - 5 * s, y - bodyH - 1 * s);
+				ctx.moveTo(x - tw / 2 - 5 * ps, y - bodyH - 1 * ps);
 				ctx.quadraticCurveTo(x - tw * 0.32, y - bodyH, x - tw * 0.24, y - bodyH - roofH);
 				ctx.lineTo(x + tw * 0.24, y - bodyH - roofH);
-				ctx.quadraticCurveTo(x + tw * 0.32, y - bodyH, x + tw / 2 + 5 * s, y - bodyH - 1 * s);
+				ctx.quadraticCurveTo(x + tw * 0.32, y - bodyH, x + tw / 2 + 5 * ps, y - bodyH - 1 * ps);
 				ctx.closePath();
 				ctx.fill();
 				y -= bodyH + roofH;
 			}
-			ctx.fillRect(x - 1.5 * s, y - 22 * s, 3 * s, 22 * s);
+			ctx.fillRect(x - 1.5 * ps, y - 22 * ps, 3 * ps, 22 * ps);
 		}
 
-		function drawTorii(x, baseY, h){
-			ctx.fillStyle = "rgba(80, 30, 40, 0.18)";
+		// colors: { post, top } (painted wood for the dojo, mossy stone in the forest)
+		function drawTorii(x, baseY, h, colors){
+			ctx.fillStyle = "rgba(20, 10, 30, 0.18)";
 			ctx.beginPath();
 			ctx.ellipse(x, baseY + 2, h * 0.55, h * 0.05, 0, 0, Math.PI * 2);
 			ctx.fill();
 
 			var post = h * 0.07;
-			ctx.fillStyle = "#c7362f";
+			ctx.fillStyle = colors.post;
 			ctx.fillRect(x - h * 0.36 - post / 2, baseY - h * 0.88, post, h * 0.88);
 			ctx.fillRect(x + h * 0.36 - post / 2, baseY - h * 0.88, post, h * 0.88);
 			ctx.fillRect(x - h * 0.5, baseY - h * 0.72, h, h * 0.05);
 			ctx.fillRect(x - h * 0.52, baseY - h * 0.87, h * 1.04, h * 0.055);
 			ctx.fillRect(x - h * 0.025, baseY - h * 0.82, h * 0.05, h * 0.1);
 
-			ctx.fillStyle = "#2a1a22";
+			ctx.fillStyle = colors.top;
 			ctx.beginPath();
 			ctx.moveTo(x - h * 0.62, baseY - h * 0.98);
 			ctx.quadraticCurveTo(x, baseY - h * 0.88, x + h * 0.62, baseY - h * 0.98);
@@ -313,15 +332,15 @@ html, body {
 			ctx.fill();
 		}
 
-		function drawTree(g, shape, x, baseY, s){
+		function drawTree(g, shape, x, baseY, ts){
 			g.save();
 			g.translate(x, baseY);
-			g.scale(s, s);
+			g.scale(ts, ts);
 			g.lineCap = "round";
 			g.strokeStyle = "#3d2230";
 			for (var i = 0; i < shape.branches.length; i++) {
 				var b = shape.branches[i];
-				g.lineWidth = Math.max(1 / s, b.w);
+				g.lineWidth = Math.max(1 / ts, b.w);
 				g.beginPath();
 				g.moveTo(b.x1, b.y1);
 				g.lineTo(b.x2, b.y2);
@@ -340,69 +359,84 @@ html, body {
 			g.restore();
 		}
 
-		function drawStoneLantern(x, baseY, s){
-			var glow = ctx.createRadialGradient(x, baseY - 56 * s, 2, x, baseY - 56 * s, 34 * s);
+		function drawStoneLantern(x, baseY, ls){
+			var glow = ctx.createRadialGradient(x, baseY - 56 * ls, 2, x, baseY - 56 * ls, 34 * ls);
 			glow.addColorStop(0, "rgba(255, 200, 110, 0.45)");
 			glow.addColorStop(1, "rgba(255, 200, 110, 0)");
 			ctx.fillStyle = glow;
-			ctx.fillRect(x - 34 * s, baseY - 90 * s, 68 * s, 68 * s);
+			ctx.fillRect(x - 34 * ls, baseY - 90 * ls, 68 * ls, 68 * ls);
 			ctx.fillStyle = "#6f6275";
-			ctx.fillRect(x - 16 * s, baseY - 8 * s, 32 * s, 8 * s);
-			ctx.fillRect(x - 5 * s, baseY - 40 * s, 10 * s, 32 * s);
-			ctx.fillRect(x - 14 * s, baseY - 46 * s, 28 * s, 6 * s);
-			ctx.fillRect(x - 11 * s, baseY - 66 * s, 22 * s, 20 * s);
+			ctx.fillRect(x - 16 * ls, baseY - 8 * ls, 32 * ls, 8 * ls);
+			ctx.fillRect(x - 5 * ls, baseY - 40 * ls, 10 * ls, 32 * ls);
+			ctx.fillRect(x - 14 * ls, baseY - 46 * ls, 28 * ls, 6 * ls);
+			ctx.fillRect(x - 11 * ls, baseY - 66 * ls, 22 * ls, 20 * ls);
 			ctx.fillStyle = "#ffd27a";
-			ctx.fillRect(x - 5 * s, baseY - 62 * s, 10 * s, 12 * s);
+			ctx.fillRect(x - 5 * ls, baseY - 62 * ls, 10 * ls, 12 * ls);
 			ctx.fillStyle = "#5a4e60";
 			ctx.beginPath();
-			ctx.moveTo(x - 22 * s, baseY - 66 * s);
-			ctx.lineTo(x + 22 * s, baseY - 66 * s);
-			ctx.lineTo(x + 8 * s, baseY - 78 * s);
-			ctx.lineTo(x - 8 * s, baseY - 78 * s);
+			ctx.moveTo(x - 22 * ls, baseY - 66 * ls);
+			ctx.lineTo(x + 22 * ls, baseY - 66 * ls);
+			ctx.lineTo(x + 8 * ls, baseY - 78 * ls);
+			ctx.lineTo(x - 8 * ls, baseY - 78 * ls);
 			ctx.closePath();
 			ctx.fill();
-			ctx.fillRect(x - 3 * s, baseY - 86 * s, 6 * s, 8 * s);
+			ctx.fillRect(x - 3 * ls, baseY - 86 * ls, 6 * ls, 8 * ls);
 		}
 
-		function drawBamboo(g, x, baseY, s, r){
+		// palette: { stalks: [color, color], nodes, leaves }
+		function drawBamboo(g, x, baseY, bs, r, palette){
 			var stalks = 3 + Math.floor(r * 3);
 			for (var i = 0; i < stalks; i++) {
-				var sx = x + (i - stalks / 2) * 11 * s;
-				var h = (130 + hash(i * 5 + r * 1000) * 90) * s;
-				g.fillStyle = i % 2 ? "#5f8c46" : "#4d7a3a";
-				g.fillRect(sx - 3.5 * s, baseY - h, 7 * s, h);
-				g.fillStyle = "rgba(30, 50, 20, 0.45)";
-				for (var n = baseY - 28 * s; n > baseY - h; n -= 28 * s) g.fillRect(sx - 4 * s, n, 8 * s, 2 * s);
-				g.fillStyle = "#6fa052";
+				var sx = x + (i - stalks / 2) * 11 * bs;
+				var h = (130 + hash(i * 5 + r * 1000) * 90) * bs;
+				g.fillStyle = palette.stalks[i % 2];
+				g.fillRect(sx - 3.5 * bs, baseY - h, 7 * bs, h);
+				g.fillStyle = palette.nodes;
+				for (var n = baseY - 28 * bs; n > baseY - h; n -= 28 * bs) g.fillRect(sx - 4 * bs, n, 8 * bs, 2 * bs);
+				g.fillStyle = palette.leaves;
 				for (var l = 0; l < 3; l++) {
 					g.beginPath();
-					g.ellipse(sx + (l - 1) * 9 * s, baseY - h + l * 10 * s, 11 * s, 3 * s, (l - 1) * 0.6, 0, Math.PI * 2);
+					g.ellipse(sx + (l - 1) * 9 * bs, baseY - h + l * 10 * bs, 11 * bs, 3 * bs, (l - 1) * 0.6, 0, Math.PI * 2);
 					g.fill();
 				}
 			}
 		}
 
-		function drawBush(x, baseY, s){
+		function drawBush(x, baseY, bs){
 			ctx.fillStyle = "#5b7d44";
 			[[-18, -14, 18], [0, -22, 22], [18, -13, 17]].forEach(function(b){
 				ctx.beginPath();
-				ctx.arc(x + b[0] * s, baseY + b[1] * s, b[2] * s, 0, Math.PI * 2);
+				ctx.arc(x + b[0] * bs, baseY + b[1] * bs, b[2] * bs, 0, Math.PI * 2);
 				ctx.fill();
 			});
 			ctx.fillStyle = "#f7a8c4";
 			for (var i = 0; i < 5; i++) {
 				ctx.beginPath();
-				ctx.arc(x + (i * 11 - 22) * s, baseY - (18 + (i % 2) * 10) * s, 2.5 * s, 0, Math.PI * 2);
+				ctx.arc(x + (i * 11 - 22) * bs, baseY - (18 + (i % 2) * 10) * bs, 2.5 * bs, 0, Math.PI * 2);
 				ctx.fill();
 			}
 		}
 
-		function drawFence(x, baseY, s){
+		function drawFence(x, baseY, fs){
 			ctx.fillStyle = "#6b4a3a";
-			ctx.fillRect(x - 60 * s, baseY - 44 * s, 6 * s, 44 * s);
-			ctx.fillRect(x + 54 * s, baseY - 44 * s, 6 * s, 44 * s);
-			ctx.fillRect(x - 64 * s, baseY - 38 * s, 128 * s, 5 * s);
-			ctx.fillRect(x - 64 * s, baseY - 22 * s, 128 * s, 5 * s);
+			ctx.fillRect(x - 60 * fs, baseY - 44 * fs, 6 * fs, 44 * fs);
+			ctx.fillRect(x + 54 * fs, baseY - 44 * fs, 6 * fs, 44 * fs);
+			ctx.fillRect(x - 64 * fs, baseY - 38 * fs, 128 * fs, 5 * fs);
+			ctx.fillRect(x - 64 * fs, baseY - 22 * fs, 128 * fs, 5 * fs);
+		}
+
+		function drawFern(x, baseY, fs, r){
+			ctx.strokeStyle = "#3e7a62";
+			ctx.lineWidth = 3 * fs;
+			ctx.lineCap = "round";
+			for (var i = -3; i <= 3; i++) {
+				var len = (38 - Math.abs(i) * 5) * fs * (0.8 + r * 0.4);
+				var a = -Math.PI / 2 + i * 0.35;
+				ctx.beginPath();
+				ctx.moveTo(x, baseY);
+				ctx.quadraticCurveTo(x + Math.cos(a) * len * 0.6, baseY + Math.sin(a) * len * 0.9, x + Math.cos(a) * len * 1.1, baseY + Math.sin(a) * len * 0.6);
+				ctx.stroke();
+			}
 		}
 
 		// The kickable torii gate standing on the path in the first screen
@@ -434,14 +468,15 @@ html, body {
 
 		// The stone path the ninja walks on; its tile seams move exactly with the ninja
 		function drawPath(){
+			var colors = theme.path;
 			var top = groundY - 4, h = Math.max(16, 22 * scale);
-			ctx.fillStyle = "#dcb98f";
+			ctx.fillStyle = colors.fill;
 			ctx.fillRect(-20, top, W + 40, h);
-			ctx.fillStyle = "rgba(120, 70, 50, 0.35)";
+			ctx.fillStyle = colors.edge;
 			ctx.fillRect(-20, top, W + 40, 2);
 			ctx.fillRect(-20, top + h - 2, W + 40, 2);
 			var tile = 56, offset = ((cameraX % tile) + tile) % tile;
-			ctx.fillStyle = "rgba(120, 70, 50, 0.28)";
+			ctx.fillStyle = colors.seam;
 			for (var tx = -offset; tx < W + tile; tx += tile) ctx.fillRect(Math.round(tx), top + 2, 2, h - 4);
 		}
 
@@ -495,24 +530,189 @@ html, body {
 			});
 		}
 
-		// Cherry trees and grass on the front canvas, in front of the ninja, scrolling fastest of all
-		function drawFront(shakeX, shakeY){
-			fctx.clearRect(0, 0, W, H);
-			fctx.save();
-			fctx.translate(shakeX, shakeY);
-			// Cherry trees rising from the bottom of the screen: the ninja walks behind them
-			eachProp(1.3, W * 0.9, W * 0.45, 19, function(x, r1, r2){
-				if (r2 < 0.5) drawTree(fctx, trees[Math.floor(r1 * trees.length)], x, H + 30, H * 0.8 / 450);
-			});
-			// Tall bamboo in front now and then (never on the first screen, which stays as it is)
-			eachProp(1.3, W * 0.55, 200, 23, function(x, r1, r2){
-				if (r2 < 0.35 && x + cameraX * 1.3 > W * 1.1) drawBamboo(fctx, x, H + 10, H / 420, r1);
-			});
+		// ---- Particles: falling cherry petals (dojo) and drifting fireflies (forest) ----
+		var PETALS = {
+			create: function(anywhere){
+				return {
+					x: anywhere ? Math.random() * W : W * (0.3 + Math.random() * 0.8),
+					y: anywhere ? Math.random() * H : -20 + Math.random() * H * 0.4,
+					vx: -30 - Math.random() * 40,
+					vy: 25 + Math.random() * 35,
+					rot: Math.random() * 6.28,
+					vr: -2 + Math.random() * 4,
+					size: 3 + Math.random() * 3,
+					sway: Math.random() * 6.28
+				};
+			},
+			// Returns false when the petal has left the screen and should be replaced
+			update: function(p, dt, camDelta){
+				p.x += (p.vx + Math.sin(time * 1.3 + p.sway) * 25) * dt - camDelta * 0.9;
+				p.y += p.vy * dt;
+				p.rot += p.vr * dt;
+				return !(p.y > H + 20 || p.x < -40 || p.x > W + 40);
+			},
+			draw: function(p){
+				ctx.save();
+				ctx.translate(p.x, p.y);
+				ctx.rotate(p.rot);
+				ctx.fillStyle = "#ffb7cf";
+				ctx.beginPath();
+				ctx.ellipse(0, 0, p.size, p.size * 0.55, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.restore();
+			}
+		};
+
+		var FIREFLIES = {
+			create: function(){
+				return { x: Math.random() * W, y: horizon - H * 0.08 + Math.random() * (groundY - horizon + H * 0.06), phase: Math.random() * 6.28 };
+			},
+			update: function(p, dt, camDelta){
+				p.x += Math.sin(time * 0.7 + p.phase) * 22 * dt - camDelta * 0.8;
+				p.y += Math.cos(time * 0.9 + p.phase * 1.3) * 16 * dt;
+				if (p.x < -20) p.x += W + 40;
+				else if (p.x > W + 20) p.x -= W + 40;
+				return true;
+			},
+			draw: function(p){
+				var a = 0.3 + 0.7 * Math.max(0, Math.sin(time * 2.5 + p.phase));
+				ctx.fillStyle = "rgba(210, 255, 130, " + (a * 0.25) + ")";
+				ctx.beginPath();
+				ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "rgba(230, 255, 160, " + a + ")";
+				ctx.beginPath();
+				ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+				ctx.fill();
+			}
+		};
+
+		var DOJO_BAMBOO = { stalks: ["#4d7a3a", "#5f8c46"], nodes: "rgba(30, 50, 20, 0.45)", leaves: "#6fa052" };
+		var GROVE_BAMBOO = { stalks: ["#2d4f5c", "#27465a"], nodes: "rgba(10, 20, 30, 0.45)", leaves: "#35606a" };
+		var FOREST_BAMBOO = { stalks: ["#3f6f5e", "#335f52"], nodes: "rgba(10, 30, 25, 0.5)", leaves: "#4f8a6e" };
+		var SHADOW_BAMBOO = { stalks: ["#101a2c", "#0c1524"], nodes: "rgba(0, 0, 0, 0.4)", leaves: "#142238" };
+
+		// ---- Scenes ----
+		// sky/ground: gradient colors; body: the sun or moon (x as a fraction of the width, y as a
+		// fraction of the height above the horizon, r as a fraction of the smaller screen side)
+		var THEMES = {
+			dojo: {
+				sky: ["#2b1b4a", "#a8457a", "#f5925a", "#ffd98a"],
+				ground: ["#f0c890", "#c98f5e"],
+				horizonLine: "rgba(110, 50, 80, 0.18)",
+				body: { x: 0.28, y: 0.2, r: 0.11, color: "#fff0c8", glow: "255, 235, 170" },
+				cloud: "rgba(255, 215, 195, 0.35)",
+				path: { fill: "#dcb98f", edge: "rgba(120, 70, 50, 0.35)", seam: "rgba(120, 70, 50, 0.28)" },
+				gate: { post: "#c7362f", top: "#2a1a22" },
+				grass: ["#6b8f4e", "#577a3e"],
+				particle: PETALS,
+				particleCount: 50,
+				drawFar: function(){
+					drawHills(0.05, horizon - H * 0.05, H * 0.12, 1, "#c9788f");
+					eachProp(0.07, W * 1.8, W * 0.4, 3, function(x, r1){
+						if (r1 < 0.8) drawFuji(x);
+					});
+					eachProp(0.15, 300 + 700 * s, 120, 5, function(x, r1, r2){
+						if (r2 < 0.5) drawPagoda(x, horizon - H * 0.035, H / 1000, "#6e3f6b");
+					});
+					drawHills(0.15, horizon + H * 0.005, H * 0.05, 4, "#6e3f6b");
+				},
+				drawNear: function(){
+					// Torii gates further back
+					var backBase = horizon + H * 0.03;
+					eachProp(0.45, 200 + 500 * s, 200 * s, 7, function(x, r1, r2){
+						if (r2 < 0.6) drawTorii(x, backBase, H * 0.17, THEMES.dojo.gate);
+					});
+					// Right behind the path: stone lanterns, bamboo, bushes and fences
+					eachProp(0.75, 60 + 230 * s, 150 * s, 11, function(x, r1, r2){
+						if (r2 < 0.3) drawStoneLantern(x, groundY, s);
+						else if (r2 < 0.55) drawBamboo(ctx, x, groundY, s, r1, DOJO_BAMBOO);
+						else if (r2 < 0.8) drawBush(x, groundY, s);
+						else drawFence(x, groundY, s);
+					});
+				},
+				drawOverhead: drawLanterns,
+				drawFront: function(){
+					// Cherry trees rising from the bottom of the screen: the ninja walks behind them
+					eachProp(1.3, W * 0.9, W * 0.45, 19, function(x, r1, r2){
+						if (r2 < 0.5) drawTree(fctx, trees[Math.floor(r1 * trees.length)], x, H + 30, H * 0.8 / 450);
+					});
+					// Tall bamboo in front now and then (never on the first screen, which stays as it is)
+					eachProp(1.3, W * 0.55, 200, 23, function(x, r1, r2){
+						if (r2 < 0.35 && x + cameraX * 1.3 > W * 1.1) drawBamboo(fctx, x, H + 10, H / 420, r1, DOJO_BAMBOO);
+					});
+				}
+			},
+
+			forest: {
+				sky: ["#070b1f", "#16214a", "#2c3f72", "#5a6f9e"],
+				// Lighter toward the path so the dark ninja stands out against it
+				ground: ["#56658f", "#8e9bbb"],
+				horizonLine: "rgba(10, 16, 40, 0.25)",
+				body: { x: 0.72, y: 0.36, r: 0.075, color: "#f4f1de", glow: "190, 210, 255", craters: true },
+				cloud: "rgba(170, 190, 230, 0.16)",
+				path: { fill: "#b9c2d6", edge: "rgba(40, 50, 80, 0.35)", seam: "rgba(40, 50, 80, 0.3)" },
+				gate: { post: "#8a93a8", top: "#4a5064" },
+				grass: ["#2f4a4a", "#243c3e"],
+				particle: FIREFLIES,
+				particleCount: 30,
+				drawFar: function(){
+					drawHills(0.05, horizon - H * 0.08, H * 0.14, 2, "#1d2748");
+					// A distant bamboo grove, in silhouette
+					eachProp(0.15, 16, 20, 29, function(x, r1, r2){
+						var h = H * (0.2 + r1 * 0.18);
+						ctx.fillStyle = r2 < 0.5 ? "#24345e" : "#2a3b66";
+						ctx.fillRect(x, horizon + H * 0.02 - h, 3 + r2 * 3, h);
+					});
+					// Mist settling over the grove
+					var mist = ctx.createLinearGradient(0, horizon - H * 0.12, 0, horizon);
+					mist.addColorStop(0, "rgba(190, 205, 235, 0)");
+					mist.addColorStop(1, "rgba(190, 205, 235, 0.35)");
+					ctx.fillStyle = mist;
+					ctx.fillRect(-20, horizon - H * 0.12, W + 40, H * 0.12);
+				},
+				drawNear: function(){
+					// Taller bamboo and glowing lanterns further back
+					var backBase = horizon + H * 0.03;
+					eachProp(0.45, 90 + 160 * s, 120 * s, 31, function(x, r1, r2){
+						if (r2 < 0.55) drawBamboo(ctx, x, backBase, s * 1.3, r1, GROVE_BAMBOO);
+						else if (r2 < 0.75) drawStoneLantern(x, backBase, s * 0.8);
+					});
+					// Beside the path: lanterns, bamboo and ferns
+					eachProp(0.75, 60 + 230 * s, 150 * s, 37, function(x, r1, r2){
+						if (r2 < 0.3) drawStoneLantern(x, groundY, s);
+						else if (r2 < 0.6) drawBamboo(ctx, x, groundY, s, r1, FOREST_BAMBOO);
+						else if (r2 < 0.85) drawFern(x, groundY, s, r1);
+					});
+				},
+				// Bamboo leaves hanging down from above
+				drawOverhead: function(){
+					eachProp(0.9, 110, 80, 41, function(x, r1, r2){
+						if (r2 > 0.7) return;
+						ctx.fillStyle = r2 < 0.35 ? "#0e1830" : "#132040";
+						for (var l = 0; l < 4; l++) {
+							ctx.beginPath();
+							ctx.ellipse(x + (l - 1.5) * 14, 10 + l * 9 + r1 * 20, 22, 5, 0.5 + (l - 1.5) * 0.3 + Math.sin(time * 0.8 + r1 * 6) * 0.05, 0, Math.PI * 2);
+							ctx.fill();
+						}
+					});
+				},
+				drawFront: function(){
+					// Dark bamboo passing in front of the ninja
+					eachProp(1.3, W * 0.45, 200, 43, function(x, r1, r2){
+						if (r2 < 0.45 && x + cameraX * 1.3 > W * 1.1) drawBamboo(fctx, x, H + 10, H / 420, r1, SHADOW_BAMBOO);
+					});
+				}
+			}
+		};
+
+		// Grass along the bottom of the front canvas, scrolling fastest of all
+		function drawGrass(){
 			var g = Math.max(0.6, scale);
 			eachProp(1.4, 60, 60, 13, function(x, r1, r2){
 				if (r2 > 0.6) return;
 				var h = (20 + r1 * 36) * g;
-				fctx.fillStyle = r2 < 0.25 ? "#6b8f4e" : "#577a3e";
+				fctx.fillStyle = r2 < 0.25 ? theme.grass[0] : theme.grass[1];
 				for (var b = -2; b <= 2; b++) {
 					fctx.beginPath();
 					fctx.moveTo(x + (b * 4 - 3) * g, H + 4);
@@ -522,7 +722,17 @@ html, body {
 					fctx.fill();
 				}
 			});
-			fctx.restore();
+		}
+
+		function setTheme(name){
+			theme = THEMES[name] || THEMES.dojo;
+			particles = [];
+			for (var i = 0; i < theme.particleCount; i++) particles.push(theme.particle.create(true));
+			shuriken = [];
+			thrown = [];
+			sparks = [];
+			flash = 0;
+			gateShake = 0;
 		}
 
 		function frame(now){
@@ -531,7 +741,6 @@ html, body {
 			time += dt;
 			var camDelta = cameraX - lastCameraX;
 			lastCameraX = cameraX;
-			var s = H / 900;
 
 			ctx.save();
 			var shakeX = 0, shakeY = 0;
@@ -542,12 +751,12 @@ html, body {
 				shake *= Math.pow(0.02, dt);
 			}
 
-			// Sky, stars and sun don't scroll: they're too far away
+			// Sky, stars and sun/moon don't scroll: they're too far away
 			var sky = ctx.createLinearGradient(0, 0, 0, horizon);
-			sky.addColorStop(0, "#2b1b4a");
-			sky.addColorStop(0.45, "#a8457a");
-			sky.addColorStop(0.78, "#f5925a");
-			sky.addColorStop(1, "#ffd98a");
+			sky.addColorStop(0, theme.sky[0]);
+			sky.addColorStop(0.45, theme.sky[1]);
+			sky.addColorStop(0.78, theme.sky[2]);
+			sky.addColorStop(1, theme.sky[3]);
 			ctx.fillStyle = sky;
 			ctx.fillRect(-20, -20, W + 40, horizon + 40);
 
@@ -560,18 +769,27 @@ html, body {
 			}
 			ctx.globalAlpha = 1;
 
-			var sunX = W * 0.28, sunY = horizon - H * 0.2, R = Math.min(W, H) * 0.11;
-			var glow = ctx.createRadialGradient(sunX, sunY, R * 0.8, sunX, sunY, R * 2.8);
-			glow.addColorStop(0, "rgba(255, 235, 170, 0.6)");
-			glow.addColorStop(1, "rgba(255, 235, 170, 0)");
+			var body = theme.body;
+			var bodyX = W * body.x, bodyY = horizon - H * body.y, R = Math.min(W, H) * body.r;
+			var glow = ctx.createRadialGradient(bodyX, bodyY, R * 0.8, bodyX, bodyY, R * 2.8);
+			glow.addColorStop(0, "rgba(" + body.glow + ", 0.6)");
+			glow.addColorStop(1, "rgba(" + body.glow + ", 0)");
 			ctx.fillStyle = glow;
-			ctx.fillRect(sunX - R * 3, sunY - R * 3, R * 6, R * 6);
-			ctx.fillStyle = "#fff0c8";
+			ctx.fillRect(bodyX - R * 3, bodyY - R * 3, R * 6, R * 6);
+			ctx.fillStyle = body.color;
 			ctx.beginPath();
-			ctx.arc(sunX, sunY, R, 0, Math.PI * 2);
+			ctx.arc(bodyX, bodyY, R, 0, Math.PI * 2);
 			ctx.fill();
+			if (body.craters) {
+				ctx.fillStyle = "rgba(190, 190, 175, 0.35)";
+				[[-0.3, -0.2, 0.22], [0.25, 0.1, 0.16], [-0.05, 0.4, 0.12]].forEach(function(c){
+					ctx.beginPath();
+					ctx.arc(bodyX + c[0] * R, bodyY + c[1] * R, c[2] * R, 0, Math.PI * 2);
+					ctx.fill();
+				});
+			}
 
-			ctx.fillStyle = "rgba(255, 215, 195, 0.35)";
+			ctx.fillStyle = theme.cloud;
 			for (var c = 0; c < clouds.length; c++) {
 				var cl = clouds[c];
 				cl.x += cl.v * dt;
@@ -582,39 +800,17 @@ html, body {
 				ctx.fill();
 			}
 
-			// Mountains and pagodas: slow
-			drawHills(0.05, horizon - H * 0.05, H * 0.12, 1, "#c9788f");
-			eachProp(0.07, W * 1.8, W * 0.4, 3, function(x, r1){
-				if (r1 < 0.8) drawFuji(x);
-			});
-			eachProp(0.15, 300 + 700 * s, 120, 5, function(x, r1, r2){
-				if (r2 < 0.5) drawPagoda(x, horizon - H * 0.035, H / 1000, "#6e3f6b");
-			});
-			drawHills(0.15, horizon + H * 0.005, H * 0.05, 4, "#6e3f6b");
+			theme.drawFar();
 
-			// Courtyard ground
 			var ground = ctx.createLinearGradient(0, horizon, 0, H);
-			ground.addColorStop(0, "#f0c890");
-			ground.addColorStop(1, "#c98f5e");
+			ground.addColorStop(0, theme.ground[0]);
+			ground.addColorStop(1, theme.ground[1]);
 			ctx.fillStyle = ground;
 			ctx.fillRect(-20, horizon, W + 40, H - horizon + 20);
-			ctx.fillStyle = "rgba(110, 50, 80, 0.18)";
+			ctx.fillStyle = theme.horizonLine;
 			ctx.fillRect(-20, horizon, W + 40, 4);
 
-			// Near background: torii gates
-			var backBase = horizon + H * 0.03;
-			eachProp(0.45, 200 + 500 * s, 200 * s, 7, function(x, r1, r2){
-				if (r2 < 0.6) drawTorii(x, backBase, H * 0.17);
-			});
-
-			// Right behind the path: stone lanterns, bamboo, bushes and fences
-			eachProp(0.75, 60 + 230 * s, 150 * s, 11, function(x, r1, r2){
-				if (r2 < 0.3) drawStoneLantern(x, groundY, s);
-				else if (r2 < 0.55) drawBamboo(ctx, x, groundY, s, r1);
-				else if (r2 < 0.8) drawBush(x, groundY, s);
-				else drawFence(x, groundY, s);
-			});
-
+			theme.drawNear();
 			drawPath();
 
 			// The kickable gate stands on the path (the ninja walks through it)
@@ -623,7 +819,7 @@ html, body {
 				ctx.save();
 				ctx.translate(gt.x, gt.base);
 				ctx.rotate(Math.sin(time * 38) * gateShake * 0.03);
-				drawTorii(0, 0, gt.h);
+				drawTorii(0, 0, gt.h, theme.gate);
 				ctx.restore();
 			}
 			gateShake = Math.max(0, gateShake - dt * 2);
@@ -679,24 +875,13 @@ html, body {
 				ctx.fill();
 			}
 
-			// Falling petals drift with the world as it scrolls
-			for (var p = 0; p < petals.length; p++) {
-				var pt = petals[p];
-				pt.x += (pt.vx + Math.sin(time * 1.3 + pt.sway) * 25) * dt - camDelta * 0.9;
-				pt.y += pt.vy * dt;
-				pt.rot += pt.vr * dt;
-				if (pt.y > H + 20 || pt.x < -40 || pt.x > W + 40) petals[p] = pt = newPetal(Math.random, false);
-				ctx.save();
-				ctx.translate(pt.x, pt.y);
-				ctx.rotate(pt.rot);
-				ctx.fillStyle = "#ffb7cf";
-				ctx.beginPath();
-				ctx.ellipse(0, 0, pt.size, pt.size * 0.55, 0, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.restore();
+			// Petals or fireflies, drifting with the world as it scrolls
+			for (var p = 0; p < particles.length; p++) {
+				if (!theme.particle.update(particles[p], dt, camDelta)) particles[p] = theme.particle.create(false);
+				theme.particle.draw(particles[p]);
 			}
 
-			drawLanterns();
+			theme.drawOverhead();
 
 			// Punch sparks and stealth smoke
 			for (var k = sparks.length - 1; k >= 0; k--) {
@@ -726,16 +911,25 @@ html, body {
 				flash = Math.max(0, flash - dt * 2.5);
 			}
 
-			drawFront(shakeX, shakeY);
+			// Foreground, in front of the ninja
+			fctx.clearRect(0, 0, W, H);
+			fctx.save();
+			fctx.translate(shakeX, shakeY);
+			theme.drawFront();
+			drawGrass();
+			fctx.restore();
 
 			requestAnimationFrame(frame);
 		}
 
 		window.addEventListener("resize", resize);
 		resize();
+		setTheme("dojo");
 		requestAnimationFrame(frame);
 
 		return {
+			// Switches to one of the scenes in THEMES ("dojo" or "forest")
+			setTheme: setTheme,
 			hit: function(x, y){
 				flash = 1;
 				shake = 8;
@@ -791,30 +985,14 @@ html, body {
 		};
 	})();
 
-	// NES-style chiptune loop built with the Web Audio API (no audio files needed).
-	// Channels mimic the old Nintendo sound chip: two pulse waves (lead + echo),
-	// a triangle bass and a noise drum kit. The melody uses the Japanese "in" scale
-	// (D, Eb, G, A, Bb) in two 4-bar sections.
+	// NES-style chiptune music built with the Web Audio API (no audio files needed).
+	// Channels mimic the old Nintendo sound chip: pulse waves for the melody and its echo, a
+	// triangle bass and noise drums. Each scene has its own song in SONGS; setSong switches.
 	var music = (function(){
-		var BPM = 150;
-		var STEP = 60 / BPM / 4;
 		var VOLUME = 0.12;
 		var _ = null;
-		var melody = [
-			// Section A
-			74,_,70,69, 67,_,69,70, 74,_,75,74, 70,_,69,_,
-			67,_,69,70, 69,67,63,_, 62,_,63,67, 69,_,_,_,
-			74,_,70,69, 67,_,69,70, 75,_,79,75, 74,_,70,_,
-			69,70,69,67, 63,_,67,_, 62,_,_,_, 62,_,_,_,
-			// Section B
-			81,_,79,_, 75,_,74,_, 79,_,75,74, 70,_,_,_,
-			74,75,74,70, 69,_,67,_, 69,70,74,75, 79,_,_,_,
-			81,_,82,81, 79,_,75,_, 74,75,79,_, 75,74,70,_,
-			69,_,70,_, 74,_,69,_, 62,_,_,_, 62,63,67,69
-		];
-		var bassRoots = [38, 31, 39, 33, 39, 38, 31, 33];
 
-		var ctx = null, master = null, noiseBuf = null, lead = null, echo = null;
+		var ctx = null, master = null, noiseBuf = null, waves = {};
 		var on = true, started = false, step = 0, nextTime = 0;
 
 		function mtof(m){ return 440 * Math.pow(2, (m - 69) / 12); }
@@ -836,8 +1014,9 @@ html, body {
 			noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.5), ctx.sampleRate);
 			var data = noiseBuf.getChannelData(0);
 			for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-			lead = pulseWave(0.25);
-			echo = pulseWave(0.125);
+			waves.lead = pulseWave(0.25);
+			waves.echo = pulseWave(0.125);
+			waves.flute = pulseWave(0.5);
 			return true;
 		}
 
@@ -854,7 +1033,7 @@ html, body {
 			g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
 			o.connect(f); f.connect(g); g.connect(master);
 			// Long notes get that wobbly Simon's Quest vibrato
-			if (dur > STEP * 2.5) {
+			if (dur > song.step * 2.5) {
 				var lfo = ctx.createOscillator(), depth = ctx.createGain();
 				lfo.frequency.value = 6;
 				depth.gain.setValueAtTime(0, t);
@@ -865,13 +1044,6 @@ html, body {
 			}
 			o.start(t);
 			o.stop(t + dur + 0.02);
-		}
-
-		// How long a melody note rings: until the next note, up to one beat
-		function noteLength(s){
-			var len = 1;
-			while (len < 4 && melody[(s + len) % melody.length] === null) len++;
-			return len * STEP * 0.92;
 		}
 
 		function noise(t, dur, vol, type, freq){
@@ -897,31 +1069,108 @@ html, body {
 			o.stop(t + 0.17);
 		}
 
-		function playStep(s, t){
-			var len = melody.length;
-			var bar = Math.floor(s / 16) % 8, i = s % 16, note = melody[s % len];
-			var sectionB = bar >= 4;
-
-			// Pulse 1: lead melody
-			if (note !== null) tone(lead, mtof(note), t, noteLength(s % len), 0.3, 6000);
-			// Pulse 2: the classic NES "echo" of the melody, a dotted eighth behind
-			var echoNote = melody[(s - 3 + len) % len];
-			if (echoNote !== null && s >= 3) tone(echo, mtof(echoNote), t, STEP * 1.4, 0.1, 4000);
-			// Triangle: bouncing octave bass on eighth notes
-			if (i % 2 === 0) tone("triangle", mtof(bassRoots[bar] + (i % 4 === 2 ? 12 : 0)), t, STEP * 1.7, 0.75, 8000);
-			// Noise channel drums
-			if (i === 0 || i === 8 || (sectionB && i === 10)) kick(t);
-			if (i === 4 || i === 12) noise(t, 0.13, 0.55, "bandpass", 1800);
-			if (i % 2 === 0) noise(t, 0.03, 0.16, "highpass", 7000);
-			if (sectionB && i === 15) noise(t, 0.06, 0.35, "bandpass", 2600);
+		// Deep, slow drum hit, like a taiko
+		function tom(t){
+			var o = ctx.createOscillator(), g = ctx.createGain();
+			o.type = "sine";
+			o.frequency.setValueAtTime(130, t);
+			o.frequency.exponentialRampToValueAtTime(55, t + 0.25);
+			g.gain.setValueAtTime(0.7, t);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+			o.connect(g); g.connect(master);
+			o.start(t);
+			o.stop(t + 0.37);
 		}
+
+		// How long a melody note rings: until the next note, up to maxSteps
+		function noteLength(melody, s, maxSteps){
+			var len = 1;
+			while (len < maxSteps && melody[(s + len) % melody.length] === null) len++;
+			return len * song.step * 0.92;
+		}
+
+		var SONGS = {
+			// Sunset Dojo: upbeat, Contra/Zelda-style drive in the Japanese "in" scale (D, Eb, G, A, Bb)
+			dojo: {
+				bpm: 150,
+				melody: [
+					// Section A
+					74,_,70,69, 67,_,69,70, 74,_,75,74, 70,_,69,_,
+					67,_,69,70, 69,67,63,_, 62,_,63,67, 69,_,_,_,
+					74,_,70,69, 67,_,69,70, 75,_,79,75, 74,_,70,_,
+					69,70,69,67, 63,_,67,_, 62,_,_,_, 62,_,_,_,
+					// Section B
+					81,_,79,_, 75,_,74,_, 79,_,75,74, 70,_,_,_,
+					74,75,74,70, 69,_,67,_, 69,70,74,75, 79,_,_,_,
+					81,_,82,81, 79,_,75,_, 74,75,79,_, 75,74,70,_,
+					69,_,70,_, 74,_,69,_, 62,_,_,_, 62,63,67,69
+				],
+				bassRoots: [38, 31, 39, 33, 39, 38, 31, 33],
+				play: function(s, t){
+					var m = this.melody, len = m.length;
+					var bar = Math.floor(s / 16) % 8, i = s % 16, note = m[s % len];
+					var sectionB = bar >= 4;
+
+					// Pulse 1: lead melody
+					if (note !== null) tone(waves.lead, mtof(note), t, noteLength(m, s % len, 4), 0.3, 6000);
+					// Pulse 2: the classic NES "echo" of the melody, a dotted eighth behind
+					var echoNote = m[(s - 3 + len) % len];
+					if (echoNote !== null && s >= 3) tone(waves.echo, mtof(echoNote), t, this.step * 1.4, 0.1, 4000);
+					// Triangle: bouncing octave bass on eighth notes
+					if (i % 2 === 0) tone("triangle", mtof(this.bassRoots[bar] + (i % 4 === 2 ? 12 : 0)), t, this.step * 1.7, 0.75, 8000);
+					// Noise channel drums
+					if (i === 0 || i === 8 || (sectionB && i === 10)) kick(t);
+					if (i === 4 || i === 12) noise(t, 0.13, 0.55, "bandpass", 1800);
+					if (i % 2 === 0) noise(t, 0.03, 0.16, "highpass", 7000);
+					if (sectionB && i === 15) noise(t, 0.06, 0.35, "bandpass", 2600);
+				}
+			},
+
+			// Moonlit Bamboo Forest: calm and mysterious, hirajoshi scale (D, E, F, A, Bb),
+			// a breathy flute-like lead, long bass notes and slow taiko-style drums
+			forest: {
+				bpm: 96,
+				melody: [
+					// Section A
+					74,_,_,_, 70,_,69,_, 65,_,_,_, 69,_,_,_,
+					70,_,69,_, 65,_,64,_, 62,_,_,_, _,_,_,_,
+					77,_,_,_, 76,_,74,_, 70,_,_,_, 74,_,76,_,
+					77,_,76,_, 74,_,70,_, 69,_,_,_, _,_,_,_,
+					// Section B
+					81,_,_,_, 82,_,81,_, 77,_,_,_, 76,_,_,_,
+					74,_,76,_, 77,_,74,_, 70,_,_,_, 69,_,_,_,
+					65,_,69,_, 70,_,74,_, 76,_,_,_, 77,_,76,_,
+					74,_,_,_, _,_,_,_, 62,_,_,_, _,_,_,_
+				],
+				bassRoots: [38, 34, 41, 33, 38, 34, 41, 38],
+				play: function(s, t){
+					var m = this.melody, len = m.length;
+					var bar = Math.floor(s / 16) % 8, i = s % 16, note = m[s % len];
+
+					// Flute-like lead
+					if (note !== null) tone(waves.flute, mtof(note), t, noteLength(m, s % len, 8), 0.28, 1800);
+					// A faint, high echo trailing well behind
+					var echoNote = m[(s - 6 + len) % len];
+					if (echoNote !== null && s >= 6) tone(waves.echo, mtof(echoNote + 12), t, this.step * 2, 0.05, 3000);
+					// Long bass notes: the root, then the fifth
+					if (i === 0) tone("triangle", mtof(this.bassRoots[bar]), t, this.step * 7.5, 0.6, 6000);
+					if (i === 8) tone("triangle", mtof(this.bassRoots[bar] + 7), t, this.step * 7.5, 0.5, 6000);
+					// Taiko-style drums and soft ticks
+					if (i === 0 || i === 11) tom(t);
+					if (i === 4 || i === 12) noise(t, 0.03, 0.07, "highpass", 8000);
+					if (bar >= 4 && i === 14) noise(t, 0.04, 0.12, "bandpass", 3000);
+				}
+			}
+		};
+		for (var name in SONGS) SONGS[name].step = 60 / SONGS[name].bpm / 4;
+		var song = SONGS.dojo;
 
 		function schedule(){
 			if (!on) return;
 			if (nextTime < ctx.currentTime - 0.2) nextTime = ctx.currentTime + 0.05;
 			while (nextTime < ctx.currentTime + 0.12) {
-				playStep(step, nextTime);
-				nextTime += STEP;
+				song.play(step, nextTime);
+				nextTime += song.step;
 				step++;
 			}
 		}
@@ -948,6 +1197,14 @@ html, body {
 		return {
 			start: start,
 			context: function(){ return ctx; },
+			// Switches to one of the songs in SONGS ("dojo" or "forest"), starting it from the top
+			setSong: function(name){
+				var next = SONGS[name];
+				if (!next || next === song) return;
+				song = next;
+				step = 0;
+				if (ctx) nextTime = ctx.currentTime + 0.1;
+			},
 			toggle: function(){
 				on = !on;
 				if (ctx) {
@@ -1325,15 +1582,28 @@ html, body {
 	});
 
 	function throwStar(){
-		if (airborne || starCount === 0 || !startMove()) return;
+		if (starCount === 0) return;
+		if (airborne) {
+			// Mid-jump, a throw counts as the jump's one attack
+			if (airAttacked) return;
+			airAttacked = true;
+			showPose("airPunch");
+			var pose = movesImg.getBoundingClientRect();
+			launchStar(facingLeft() ? pose.right - 40 : pose.left + 40, pose.top + 21);
+			return;
+		}
+		if (!startMove()) return;
+		ninjaImg.style.backgroundPosition = '-40px 0px';   // the punch frame doubles as a throw
+		var box = ninjaImg.getBoundingClientRect();
+		launchStar(facingLeft() ? box.left : box.right, box.top + 21);
+		setTimeout(finishMove, 250);
+	}
+
+	function launchStar(x, y){
 		starCount--;
 		updateStarCount();
-		ninjaImg.style.backgroundPosition = '-40px 0px';   // the punch frame doubles as a throw
-		var dir = facingLeft() ? -1 : 1;
-		var box = ninjaImg.getBoundingClientRect();
-		scene.throwStar(dir > 0 ? box.right : box.left, box.top + 21, dir);
+		scene.throwStar(x, y, facingLeft() ? -1 : 1);
 		sfx.blip(1400, 300, 0.15);
-		setTimeout(finishMove, 250);
 	}
 
 	// ---- Stealth mode: hold S to fade out; let go and the ninja slowly fades back in ----
@@ -1470,5 +1740,32 @@ html, body {
 		// No punching in the middle of a kick
 		if (moveBusy) blockKey(e);
 	}
+
+	// ---- Scene menu (for trying scenes out while the game is in development) ----
+	var sceneSelect = document.getElementById("sceneSelect");
+
+	function chooseScene(name){
+		scene.setTheme(name);
+		music.setSong(name);
+		// Start the new scene back at the beginning of its world
+		worldX = Math.round(window.innerWidth * 0.3);
+		placeNinja();
+		try { localStorage.setItem("ninjaScene", name); } catch (e) {}
+	}
+
+	sceneSelect.addEventListener("change", function(){
+		chooseScene(sceneSelect.value);
+		music.start();
+		// Hand the keyboard back to the game
+		sceneSelect.blur();
+	});
+
+	try {
+		var savedScene = localStorage.getItem("ninjaScene");
+		if (savedScene && sceneSelect.querySelector('option[value="' + savedScene + '"]')) {
+			sceneSelect.value = savedScene;
+			chooseScene(savedScene);
+		}
+	} catch (e) {}
 </script>
 </html>
