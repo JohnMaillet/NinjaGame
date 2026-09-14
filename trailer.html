@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ninja Attack! Trailer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+#screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+  display: block;
+}
+
+#controls {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  align-items: center;
+  font: 14px/1.2 "Segoe UI", system-ui, sans-serif;
+  color: #ffe8c2;
+}
+#controls button, #controls a {
+  padding: 8px 16px;
+  font: inherit;
+  color: #ffe8c2;
+  background: rgba(43, 27, 74, 0.85);
+  border: 1px solid rgba(255, 220, 180, 0.5);
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+}
+#controls button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+#controls[hidden], #controls a[hidden] {
+  display: none;
+}
+</style>
+</head>
+<body>
+<canvas id="screen" width="1280" height="720"></canvas>
+<div id="controls">
+	<a id="backLink" href="index.html">&larr; Back to the game</a>
+	<button id="playBtn" type="button" disabled>&#9654; Play trailer</button>
+	<button id="recordBtn" type="button" disabled>&#9679; Record video</button>
+	<a id="saveLink" hidden>&#8681; Save video</a>
+	<span id="status">Loading&hellip;</span>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// A ~50 second "3D" trailer for Ninja Attack!: the 2D sprites stand in a real 3D world (with a
+// little cardboard-cutout thickness) while the camera swoops and orbits around them.
+// The whole trailer is a function of time (renderAt), so it can be played, recorded, or paused
+// on any moment for a still (add ?t=23.5 to the URL).
+(function(){
+	var WIDTH = 1280, HEIGHT = 720, DURATION = 50;
+	var IMAGES = "Resources/Images/", AUDIO = "Resources/Audio/";
+	var V3 = THREE.Vector3;
+
+	var screen = document.getElementById("screen");
+	var out = screen.getContext("2d");
+	var controls = document.getElementById("controls");
+	var playBtn = document.getElementById("playBtn");
+	var recordBtn = document.getElementById("recordBtn");
+	var saveLink = document.getElementById("saveLink");
+	var statusEl = document.getElementById("status");
+
+	var renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+	renderer.setPixelRatio(1);
+	renderer.setSize(WIDTH, HEIGHT, false);
+	var scene = new THREE.Scene();
+	var camera = new THREE.PerspectiveCamera(45, WIDTH / HEIGHT, 0.05, 4000);
+	scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+	var sunLight = new THREE.DirectionalLight(0xffe0b0, 0.9);
+	sunLight.position.set(-5, 10, 8);
+	scene.add(sunLight);
+
+	// ---------- small helpers ----------
+	function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+	function ease(x){ x = clamp01(x); return x * x * (3 - 2 * x); }
+	function lerp(a, b, k){ return a + (b - a) * k; }
+	function span(t, t0, t1){ return clamp01((t - t0) / (t1 - t0)); }
+	function lerpV(a, b, k){ return new V3(lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)); }
+	function hash(n){
+		var x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+		return x - Math.floor(x);
+	}
+	function seeded(seed){
+		return function(){
+			seed = (seed * 16807) % 2147483647;
+			return (seed - 1) / 2147483646;
+		};
+	}
+
+	function canvasTexture(w, h, draw, pixelated){
+		var c = document.createElement("canvas");
+		c.width = w;
+		c.height = h;
+		draw(c.getContext("2d"), w, h);
+		return toTexture(c, pixelated);
+	}
+
+	function toTexture(c, pixelated){
+		var texture = new THREE.CanvasTexture(c);
+		if (pixelated) {
+			texture.magFilter = THREE.NearestFilter;
+			texture.minFilter = THREE.NearestFilter;
+			texture.generateMipmaps = false;
+		}
+		return texture;
+	}
+
+	// A flat cutout standing on the ground: (x, z) is where its bottom center stands
+	function cutout(texture, width, height, x, y, z){
+		var material = new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.4, side: THREE.DoubleSide });
+		var mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+		mesh.position.set(x, y + height / 2, z);
+		return mesh;
+	}
+
+	function glowSprite(texture, color, size){
+		var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, color: color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+		sprite.scale.set(size, size, 1);
+		return sprite;
+	}
+
+	// ---------- textures drawn in the game's style ----------
+	function skyTexture(stops, groundColor){
+		return canvasTexture(8, 1024, function(g, w, h){
+			var sky = g.createLinearGradient(0, 0, 0, h / 2);
+			sky.addColorStop(0, stops[0]);
+			sky.addColorStop(0.45, stops[1]);
+			sky.addColorStop(0.78, stops[2]);
+			sky.addColorStop(1, stops[3]);
+			g.fillStyle = sky;
+			g.fillRect(0, 0, w, h / 2);
+			g.fillStyle = groundColor;
+			g.fillRect(0, h / 2, w, h / 2);
+		});
+	}
+
+	function skyDome(stops, groundColor){
+		var dome = new THREE.Mesh(
+			new THREE.SphereGeometry(1500, 32, 16),
+			new THREE.MeshBasicMaterial({ map: skyTexture(stops, groundColor), side: THREE.BackSide, fog: false, depthWrite: false })
+		);
+		dome.renderOrder = -1;
+		return dome;
+	}
+
+	function orbTexture(glow, color, craters){
+		return canvasTexture(256, 256, function(g){
+			var gradient = g.createRadialGradient(128, 128, 50, 128, 128, 128);
+			gradient.addColorStop(0, "rgba(" + glow + ", 0.7)");
+			gradient.addColorStop(1, "rgba(" + glow + ", 0)");
+			g.fillStyle = gradient;
+			g.fillRect(0, 0, 256, 256);
+			g.fillStyle = color;
+			g.beginPath();
+			g.arc(128, 128, 54, 0, Math.PI * 2);
+			g.fill();
+			if (craters) {
+				g.fillStyle = "rgba(190, 190, 175, 0.4)";
+				[[-16, -10, 12], [14, 6, 9], [-2, 22, 7]].forEach(function(c){
+					g.beginPath();
+					g.arc(128 + c[0], 128 + c[1], c[2], 0, Math.PI * 2);
+					g.fill();
+				});
+			}
+		});
+	}
+
+	function softTexture(inner, outer){
+		return canvasTexture(128, 128, function(g){
+			var gradient = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+			gradient.addColorStop(0, inner);
+			gradient.addColorStop(1, outer);
+			g.fillStyle = gradient;
+			g.fillRect(0, 0, 128, 128);
+		});
+	}
+
+	function fujiTexture(){
+		return canvasTexture(1024, 420, function(g, w, h){
+			var cx = w / 2, peak = 20, bw = w / 2, rise = h - peak;
+			g.beginPath();
+			g.moveTo(0, h);
+			g.quadraticCurveTo(cx - bw * 0.35, h - rise * 0.55, cx - bw * 0.1, peak);
+			g.lineTo(cx + bw * 0.1, peak);
+			g.quadraticCurveTo(cx + bw * 0.35, h - rise * 0.55, w, h);
+			g.closePath();
+			g.fillStyle = "#9a5a86";
+			g.fill();
+			g.save();
+			g.clip();
+			g.fillStyle = "#fbe7ef";
+			g.beginPath();
+			g.moveTo(0, 0);
+			g.lineTo(w, 0);
+			var capY = peak + rise * 0.24;
+			for (var i = 10; i >= 0; i--) g.lineTo(cx - bw * 0.5 + bw * i / 10, capY + (i % 2 ? rise * 0.07 : 0));
+			g.closePath();
+			g.fill();
+			g.restore();
+		});
+	}
+
+	function drawPagoda(g, x, baseY, s, color){
+		g.fillStyle = color;
+		g.fillRect(x - 34 * s, baseY, 68 * s, 400);
+		var y = baseY;
+		for (var k = 0; k < 5; k++) {
+			var tw = (64 - k * 9) * s, bodyH = 13 * s, roofH = 7 * s;
+			g.fillRect(x - tw * 0.3, y - bodyH, tw * 0.6, bodyH);
+			g.beginPath();
+			g.moveTo(x - tw / 2 - 5 * s, y - bodyH - s);
+			g.quadraticCurveTo(x - tw * 0.32, y - bodyH, x - tw * 0.24, y - bodyH - roofH);
+			g.lineTo(x + tw * 0.24, y - bodyH - roofH);
+			g.quadraticCurveTo(x + tw * 0.32, y - bodyH, x + tw / 2 + 5 * s, y - bodyH - s);
+			g.closePath();
+			g.fill();
+			y -= bodyH + roofH;
+		}
+		g.fillRect(x - 1.5 * s, y - 22 * s, 3 * s, 22 * s);
+	}
+
+	// Rolling hills that repeat seamlessly side to side
+	function hillsTexture(color, seed, pagodas){
+		var texture = canvasTexture(2048, 256, function(g, w, h){
+			g.fillStyle = color;
+			g.beginPath();
+			g.moveTo(0, h);
+			for (var x = 0; x <= w; x += 8) {
+				var k = x / w * Math.PI * 2;
+				var wave = 0.5 + 0.28 * Math.sin(k * 3 + seed) + 0.14 * Math.sin(k * 7 + seed * 2.3) + 0.08 * Math.sin(k * 17 + seed * 5.1);
+				g.lineTo(x, h * 0.75 - h * 0.4 * wave);
+			}
+			g.lineTo(w, h);
+			g.closePath();
+			g.fill();
+			if (pagodas) [0.18, 0.52, 0.83].forEach(function(p){ drawPagoda(g, p * w, h * 0.5, 1.0, color); });
+		});
+		texture.wrapS = THREE.RepeatWrapping;
+		return texture;
+	}
+
+	function toriiTexture(post, top){
+		return canvasTexture(640, 512, function(g){
+			var x = 320, baseY = 508, h = 470;
+			var p = h * 0.07;
+			g.fillStyle = post;
+			g.fillRect(x - h * 0.36 - p / 2, baseY - h * 0.88, p, h * 0.88);
+			g.fillRect(x + h * 0.36 - p / 2, baseY - h * 0.88, p, h * 0.88);
+			g.fillRect(x - h * 0.5, baseY - h * 0.72, h, h * 0.05);
+			g.fillRect(x - h * 0.52, baseY - h * 0.87, h * 1.04, h * 0.055);
+			g.fillRect(x - h * 0.025, baseY - h * 0.82, h * 0.05, h * 0.1);
+			g.fillStyle = top;
+			g.beginPath();
+			g.moveTo(x - h * 0.62, baseY - h * 0.98);
+			g.quadraticCurveTo(x, baseY - h * 0.88, x + h * 0.62, baseY - h * 0.98);
+			g.lineTo(x + h * 0.56, baseY - h * 0.9);
+			g.quadraticCurveTo(x, baseY - h * 0.82, x - h * 0.56, baseY - h * 0.9);
+			g.closePath();
+			g.fill();
+		});
+	}
+
+	function treeTexture(seed){
+		var rnd = seeded(seed), branches = [], blossoms = [];
+		(function grow(x, y, angle, len, width, depth){
+			var x2 = x + Math.cos(angle) * len, y2 = y + Math.sin(angle) * len;
+			branches.push([x, y, x2, y2, width]);
+			if (depth === 0) {
+				blossoms.push([x2, y2, 16 + rnd() * 12]);
+				return;
+			}
+			if (depth < 3) blossoms.push([(x + x2) / 2, (y + y2) / 2, 12 + rnd() * 9]);
+			grow(x2, y2, angle - 0.3 - rnd() * 0.3, len * 0.74, width * 0.66, depth - 1);
+			grow(x2, y2, angle + 0.3 + rnd() * 0.3, len * 0.7, width * 0.66, depth - 1);
+		})(0, 0, -Math.PI / 2 + (rnd() - 0.5) * 0.5, 150, 24, 6);
+
+		return canvasTexture(1024, 900, function(g, w, h){
+			g.translate(w / 2, h - 6);
+			g.scale(1.7, 1.7);
+			g.lineCap = "round";
+			g.strokeStyle = "#3d2230";
+			branches.forEach(function(b){
+				g.lineWidth = b[4];
+				g.beginPath();
+				g.moveTo(b[0], b[1]);
+				g.lineTo(b[2], b[3]);
+				g.stroke();
+			});
+			var pinks = ["#f48fb1", "#f7a8c4", "#ffd1e0"];
+			blossoms.forEach(function(bl){
+				for (var k = 0; k < 3; k++) {
+					g.fillStyle = pinks[k];
+					g.beginPath();
+					g.arc(bl[0] + (k - 1) * bl[2] * 0.45, bl[1] - k * bl[2] * 0.3, bl[2] * (1 - k * 0.22), 0, Math.PI * 2);
+					g.fill();
+				}
+			});
+		});
+	}
+
+	function stoneLanternTexture(){
+		return canvasTexture(128, 256, function(g){
+			var x = 64, b = 254, s = 2.8;
+			g.fillStyle = "#6f6275";
+			g.fillRect(x - 16 * s, b - 8 * s, 32 * s, 8 * s);
+			g.fillRect(x - 5 * s, b - 40 * s, 10 * s, 32 * s);
+			g.fillRect(x - 14 * s, b - 46 * s, 28 * s, 6 * s);
+			g.fillRect(x - 11 * s, b - 66 * s, 22 * s, 20 * s);
+			g.fillStyle = "#ffd27a";
+			g.fillRect(x - 5 * s, b - 62 * s, 10 * s, 12 * s);
+			g.fillStyle = "#5a4e60";
+			g.beginPath();
+			g.moveTo(x - 22 * s, b - 66 * s);
+			g.lineTo(x + 22 * s, b - 66 * s);
+			g.lineTo(x + 8 * s, b - 78 * s);
+			g.lineTo(x - 8 * s, b - 78 * s);
+			g.closePath();
+			g.fill();
+			g.fillRect(x - 3 * s, b - 86 * s, 6 * s, 8 * s);
+		});
+	}
+
+	function bambooTexture(palette, r){
+		return canvasTexture(256, 512, function(g){
+			var x = 128, baseY = 512, s = 2.2;
+			var stalks = 3 + Math.floor(r * 3);
+			for (var i = 0; i < stalks; i++) {
+				var sx = x + (i - stalks / 2) * 11 * s;
+				var h = (130 + hash(i * 5 + r * 1000) * 90) * s;
+				g.fillStyle = palette[i % 2];
+				g.fillRect(sx - 3.5 * s, baseY - h, 7 * s, h);
+				g.fillStyle = "rgba(10, 25, 15, 0.45)";
+				for (var n = baseY - 28 * s; n > baseY - h; n -= 28 * s) g.fillRect(sx - 4 * s, n, 8 * s, 2 * s);
+				g.fillStyle = palette[2];
+				for (var l = 0; l < 3; l++) {
+					g.beginPath();
+					g.ellipse(sx + (l - 1) * 9 * s, baseY - h + l * 10 * s, 11 * s, 3 * s, (l - 1) * 0.6, 0, Math.PI * 2);
+					g.fill();
+				}
+			}
+		});
+	}
+
+	function hangingLanternTexture(){
+		return canvasTexture(64, 96, function(g){
+			g.translate(32, 2);
+			g.scale(1.8, 1.8);
+			g.strokeStyle = "rgba(40, 20, 30, 0.9)";
+			g.lineWidth = 1.5;
+			g.beginPath();
+			g.moveTo(0, 0);
+			g.lineTo(0, 10);
+			g.stroke();
+			g.fillStyle = "#2a1a22";
+			g.fillRect(-6, 9, 12, 4);
+			g.fillRect(-6, 37, 12, 4);
+			g.fillStyle = "#e2483c";
+			g.beginPath();
+			g.ellipse(0, 25, 13, 13, 0, 0, Math.PI * 2);
+			g.fill();
+			g.strokeStyle = "rgba(120, 20, 20, 0.5)";
+			g.lineWidth = 1;
+			for (var r = -8; r <= 8; r += 4) {
+				g.beginPath();
+				g.moveTo(-12 + Math.abs(r) * 0.3, 25 + r);
+				g.lineTo(12 - Math.abs(r) * 0.3, 25 + r);
+				g.stroke();
+			}
+		});
+	}
+
+	function groveTexture(colors, seed){
+		return canvasTexture(2048, 256, function(g, w, h){
+			for (var i = 0; i < 700; i++) {
+				var x = hash(i * 3 + seed) * w, stalkH = 60 + hash(i * 7 + seed) * 196, stalkW = 2 + hash(i * 11 + seed) * 3;
+				g.fillStyle = colors[i % 2];
+				g.fillRect(x, h - stalkH, stalkW, stalkH);
+				g.fillStyle = "rgba(0, 0, 0, 0.25)";
+				for (var n = h - 24; n > h - stalkH; n -= 24) g.fillRect(x, n, stalkW, 1);
+			}
+		});
+	}
+
+	function pathTexture(fill, line){
+		var texture = canvasTexture(128, 64, function(g, w, h){
+			g.fillStyle = fill;
+			g.fillRect(0, 0, w, h);
+			g.fillStyle = line;
+			g.fillRect(0, 0, w, 3);
+			g.fillRect(0, h - 3, w, 3);
+			g.fillRect(0, 0, 3, h);
+		});
+		texture.wrapS = THREE.RepeatWrapping;
+		texture.repeat.set(300, 1);
+		return texture;
+	}
+
+	function ground(color, pathTex){
+		var group = new THREE.Group();
+		var plane = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshBasicMaterial({ color: color }));
+		plane.rotation.x = -Math.PI / 2;
+		group.add(plane);
+		var path = new THREE.Mesh(new THREE.PlaneGeometry(600, 2.2), new THREE.MeshBasicMaterial({ map: pathTex }));
+		path.rotation.x = -Math.PI / 2;
+		path.position.set(0, 0.01, 0);
+		group.add(path);
+		return group;
+	}
+
+	function pointCloud(count, texture, size, color, additive){
+		var geometry = new THREE.BufferGeometry();
+		geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+		var material = new THREE.PointsMaterial({ map: texture, size: size, color: color, transparent: true, depthWrite: false, alphaTest: additive ? 0 : 0.3 });
+		if (additive) material.blending = THREE.AdditiveBlending;
+		return new THREE.Points(geometry, material);
+	}
+
+	var glowTex = softTexture("rgba(255, 255, 255, 1)", "rgba(255, 255, 255, 0)");
+	var smokeTex = softTexture("rgba(255, 255, 255, 0.9)", "rgba(255, 255, 255, 0)");
+	var petalTex = canvasTexture(32, 32, function(g){
+		g.fillStyle = "#ffb7cf";
+		g.beginPath();
+		g.ellipse(16, 16, 14, 8, 0.5, 0, Math.PI * 2);
+		g.fill();
+	});
+
+	// ---------- the Sunset Dojo set ----------
+	var dojoFog = new THREE.Fog(0xf5a26a, 80, 1100);
+	var dojo = new THREE.Group();
+	(function buildDojo(){
+		dojo.add(skyDome(["#2b1b4a", "#a8457a", "#f5925a", "#ffd98a"], "#f0c890"));
+		var sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: orbTexture("255, 235, 170", "#fff0c8"), fog: false, transparent: true, depthWrite: false }));
+		sun.position.set(-170, 75, -620);
+		sun.scale.set(280, 280, 1);
+		dojo.add(sun);
+		var farHills = cutout(hillsTexture("#c9788f", 1, false), 2400, 140, 0, -40, -560);
+		farHills.material.map.repeat.set(2, 1);
+		dojo.add(farHills);
+		dojo.add(cutout(fujiTexture(), 540, 222, 120, -6, -700));
+		var midHills = cutout(hillsTexture("#6e3f6b", 4, true), 1600, 70, 0, -22, -300);
+		dojo.add(midHills);
+		dojo.add(ground(0xe9c08e, pathTexture("#dcb98f", "rgba(120, 70, 50, 0.35)")));
+
+		var rnd = seeded(5);
+		var torii = toriiTexture("#c7362f", "#2a1a22");
+		for (var x = -80; x < 120; x += 26 + rnd() * 14) dojo.add(cutout(torii, 7.7, 6.2, x, 0, -18 - rnd() * 6));
+		var trees = [treeTexture(11), treeTexture(28), treeTexture(45)];
+		for (var tx = -90; tx < 130; tx += 9 + rnd() * 10) {
+			var th = 7 + rnd() * 4;
+			dojo.add(cutout(trees[Math.floor(rnd() * 3)], th * 1.14, th, tx, 0, -9 - rnd() * 14));
+		}
+		// Cherry trees between the path and the camera: their trunks whip past in the running shot
+		[-10, 8.5, 40, 60].forEach(function(fx, i){ dojo.add(cutout(trees[i % 3], 10.3, 9, fx, 0, 3.6)); });
+		var lantern = stoneLanternTexture();
+		for (var lx = -60; lx < 90; lx += 7) dojo.add(cutout(lantern, 1.0, 2.0, lx + rnd() * 2, 0, -2.4));
+		var bamboo = [bambooTexture(["#4d7a3a", "#5f8c46", "#6fa052"], 0.2), bambooTexture(["#4d7a3a", "#5f8c46", "#6fa052"], 0.8)];
+		for (var bx = -60; bx < 90; bx += 11 + rnd() * 8) dojo.add(cutout(bamboo[Math.floor(rnd() * 2)], 2.4, 4.8, bx, 0, -3.2 - rnd()));
+		var hanging = hangingLanternTexture();
+		for (var hx = -40; hx < 70; hx += 4.5) {
+			dojo.add(cutout(hanging, 0.55, 0.85, hx, 4.6, -1.4));
+			var glow = glowSprite(glowTex, 0xffb35a, 1.8);
+			glow.position.set(hx, 5.0, -1.3);
+			dojo.add(glow);
+		}
+		// The big gate on the path (the one that drops ninja stars in the game)
+		dojo.add(cutout(torii, 5.5, 4.4, 7, 0, -0.8));
+	})();
+	scene.add(dojo);
+
+	var PETALS = 600;
+	var petals = pointCloud(PETALS, petalTex, 0.14, 0xffffff, false);
+	var petalBase = [];
+	for (var pi = 0; pi < PETALS; pi++) petalBase.push([-30 + hash(pi * 3) * 100, hash(pi * 7) * 12, -14 + hash(pi * 11) * 20, hash(pi * 13)]);
+	dojo.add(petals);
+
+	// ---------- the Moonlit Bamboo Forest set ----------
+	var forestFog = new THREE.Fog(0x2c3f72, 30, 700);
+	var forest = new THREE.Group();
+	(function buildForest(){
+		forest.add(skyDome(["#070b1f", "#16214a", "#2c3f72", "#5a6f9e"], "#56658f"));
+		var moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: orbTexture("190, 210, 255", "#f4f1de", true), fog: false, transparent: true, depthWrite: false }));
+		moon.position.set(180, 170, -700);
+		moon.scale.set(160, 160, 1);
+		forest.add(moon);
+		var stars = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xfff6e0, size: 2, sizeAttenuation: false, fog: false }));
+		var starPositions = [];
+		for (var i = 0; i < 500; i++) {
+			var a = hash(i * 5) * Math.PI * 2, e = 0.15 + hash(i * 9) * 1.3;
+			starPositions.push(Math.cos(a) * Math.cos(e) * 1300, Math.sin(e) * 1300, Math.sin(a) * Math.cos(e) * 1300);
+		}
+		stars.geometry.setAttribute("position", new THREE.Float32BufferAttribute(starPositions, 3));
+		forest.add(stars);
+		var hills = cutout(hillsTexture("#1d2748", 2, false), 2400, 160, 0, -40, -560);
+		hills.material.map.repeat.set(2, 1);
+		forest.add(hills);
+		forest.add(cutout(groveTexture(["#24345e", "#2a3b66"], 1), 1600, 130, 0, -8, -260));
+		forest.add(cutout(groveTexture(["#2d4f5c", "#27465a"], 2), 700, 45, 0, -2, -80));
+		forest.add(ground(0x6d7ba1, pathTexture("#b9c2d6", "rgba(40, 50, 80, 0.35)")));
+
+		var rnd = seeded(9);
+		var bamboo = [bambooTexture(["#3f6f5e", "#335f52", "#4f8a6e"], 0.3), bambooTexture(["#3f6f5e", "#335f52", "#4f8a6e"], 0.9)];
+		for (var x = -60; x < 90; x += 6 + rnd() * 6) {
+			var h = 9 + rnd() * 4;
+			forest.add(cutout(bamboo[Math.floor(rnd() * 2)], h / 2, h, x, 0, -6 - rnd() * 8));
+		}
+		var shadowBamboo = bambooTexture(["#101a2c", "#0c1524", "#142238"], 0.6);
+		[-6, 11, 26].forEach(function(fx){ forest.add(cutout(shadowBamboo, 6, 12, fx, 0, 3.8)); });
+		var lantern = stoneLanternTexture();
+		for (var lx = -40; lx < 60; lx += 8) {
+			forest.add(cutout(lantern, 1.0, 2.0, lx, 0, -2.4));
+			var glow = glowSprite(glowTex, 0xffb35a, 2.2);
+			glow.position.set(lx, 1.45, -2.2);
+			forest.add(glow);
+		}
+	})();
+	scene.add(forest);
+
+	var FIREFLIES = 220;
+	var fireflies = pointCloud(FIREFLIES, glowTex, 0.22, 0xd6ff8a, true);
+	forest.add(fireflies);
+
+	// ---------- actors: pixel sprites rebuilt as little 3D blocks ----------
+	// Every opaque sprite pixel becomes a shaded cube a few pixels deep, so the 2D art stays exactly
+	// the same from the front but reads as a solid figure when the camera circles around it.
+	var VOXEL_DEPTH = 12;
+	function makeActor(frames, pxSize, torsoPx, feetPx){
+		var parsed = frames.map(function(c){
+			var data = c.getContext("2d").getImageData(0, 0, c.width, c.height).data, voxels = [];
+			for (var y = 0; y < c.height; y++) {
+				for (var x = 0; x < c.width; x++) {
+					var i = (y * c.width + x) * 4;
+					if (data[i + 3] > 128) voxels.push([x, y, data[i] / 255, data[i + 1] / 255, data[i + 2] / 255]);
+				}
+			}
+			return voxels;
+		});
+		var capacity = Math.max.apply(null, parsed.map(function(v){ return v.length; }));
+		var material = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+		var mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(pxSize, pxSize, pxSize * VOXEL_DEPTH), material, capacity);
+		mesh.frustumCulled = false;
+		var group = new THREE.Group();
+		group.add(mesh);
+		var dummy = new THREE.Object3D(), color = new THREE.Color(), currentFrame = -1;
+
+		function showFrame(f){
+			var voxels = parsed[f];
+			for (var i = 0; i < voxels.length; i++) {
+				var v = voxels[i];
+				dummy.position.set((v[0] + 0.5 - torsoPx) * pxSize, (feetPx - v[1] - 0.5) * pxSize, 0);
+				dummy.updateMatrix();
+				mesh.setMatrixAt(i, dummy.matrix);
+				mesh.setColorAt(i, color.setRGB(v[2], v[3], v[4]));
+			}
+			mesh.count = voxels.length;
+			mesh.instanceMatrix.needsUpdate = true;
+			if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+			currentFrame = f;
+		}
+
+		var shadow = new THREE.Mesh(new THREE.CircleGeometry(0.55, 24), new THREE.MeshBasicMaterial({ color: 0x1a0033, transparent: true, opacity: 0.3, depthWrite: false }));
+		shadow.rotation.x = -Math.PI / 2;
+		scene.add(group);
+		scene.add(shadow);
+		return {
+			// state: { x, y, z, frame, facing, opacity, spin }, or null to hide
+			set: function(state){
+				group.visible = shadow.visible = !!state && (state.opacity === undefined || state.opacity > 0.01);
+				if (!group.visible) return;
+				var opacity = state.opacity === undefined ? 1 : state.opacity;
+				if (state.frame !== currentFrame) showFrame(state.frame);
+				group.position.set(state.x, state.y, state.z || 0);
+				group.scale.x = state.facing || 1;
+				group.rotation.z = state.spin || 0;
+				material.transparent = opacity < 1;
+				material.opacity = opacity;
+				material.depthWrite = opacity >= 1;
+				var size = Math.max(0.35, 1 - state.y / 4);
+				shadow.position.set(state.x, 0.02, (state.z || 0) - 0.1);
+				shadow.scale.set(size, size * 0.4, 1);
+				shadow.material.opacity = 0.3 * opacity;
+			}
+		};
+	}
+
+	function starMesh(){
+		var shape = new THREE.Shape();
+		for (var i = 0; i < 8; i++) {
+			var a = i * Math.PI / 4, r = i % 2 ? 0.06 : 0.2;
+			if (i === 0) shape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+			else shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+		}
+		shape.closePath();
+		var geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.025, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 1 });
+		geometry.center();
+		var mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: 0x5a616c, specular: 0xffffff, shininess: 90 }));
+		mesh.visible = false;
+		scene.add(mesh);
+		return mesh;
+	}
+
+	// ---------- the script ----------
+	var N = { neutral: 0, stepL: 1, stepR: 2, punch: 3, crouch: 4, tuck: 5, sideCh: 6, sideKick: 7, roundCh: 8, roundKick: 9, flying: 10, airRound: 11, airPunch: 12 };
+	var VIL = { idle: 0, slash: 1, hurt: 2 };
+	var THROWS = [{ t0: 26.15, t1: 27.6, y: 1.15 }, { t0: 26.35, t1: 27.9, y: 1.45 }, { t0: 26.55, t1: 28.2, y: 0.85 }];
+	var PUFFS = [{ t: 14.3, x: 24, y: 1.0 }, { t: 29.15, x: 22.4, y: 0.8 }, { t: 30.0, x: 25.6, y: 0.8 }, { t: 32.1, x: 19.8, y: 1.2 }];
+	var HITS = [
+		{ t: 23.45, x: 24.2, y: 1.3, big: true },
+		{ t: 27.6, x: 26.8, y: 1.15 },
+		{ t: 27.9, x: 26.8, y: 1.45 },
+		{ t: 28.2, x: 26.8, y: 0.85 },
+		{ t: 31.1, x: 24.5, y: 1.35, big: true }
+	];
+
+	function steps(t, rate){ return Math.floor(t * rate) % 2 ? N.stepL : N.stepR; }
+
+	function ninjaAt(t){
+		if (t < 33) {
+			if (t < 10) {
+				var pose = N.neutral;
+				if (t >= 8 && t < 8.1) pose = N.sideCh;
+				else if (t >= 8.1 && t < 8.45) pose = N.sideKick;
+				else if (t >= 8.45 && t < 8.55) pose = N.sideCh;
+				return { x: 0, y: 0, frame: pose, facing: 1 };
+			}
+			if (t < 14) return { x: lerp(0, 13, span(t, 10, 14)), y: 0, frame: steps(t, 8), facing: 1 };
+			if (t < 18) return { x: 13, y: 0, frame: N.neutral, facing: 1 };
+			if (t < 18.9) return { x: lerp(13, 17.5, span(t, 18, 18.9)), y: 0, frame: steps(t, 9), facing: 1 };
+			if (t < 19.1) return { x: 17.5, y: 0, frame: N.crouch, facing: 1 };
+			if (t < 19.6) {
+				var k = span(t, 19.1, 19.6);
+				return { x: lerp(17.5, 19.5, k), y: 2.2 * Math.sin(k * Math.PI / 2), frame: N.tuck, facing: 1 };
+			}
+			if (t < 23) {
+				// Bullet time: barely moving while the camera circles
+				var k2 = span(t, 19.6, 23);
+				return { x: lerp(19.5, 20.3, k2), y: 2.2 + 0.2 * Math.sin(k2 * Math.PI), frame: t < 19.75 ? N.tuck : N.flying, facing: 1 };
+			}
+			if (t < 23.45) {
+				var k3 = span(t, 23, 23.45);
+				return { x: lerp(20.3, 23.2, k3), y: lerp(2.2, 1.0, k3), frame: N.flying, facing: 1 };
+			}
+			if (t < 23.8) {
+				var k4 = span(t, 23.45, 23.8);
+				return { x: lerp(23.2, 22.4, ease(k4)), y: 1 - k4 * k4, frame: k4 < 0.6 ? N.tuck : N.crouch, facing: 1 };
+			}
+			if (t < 29.1) {
+				var throwing = THROWS.some(function(s){ return t >= s.t0 - 0.05 && t < s.t0 + 0.12; });
+				return { x: 22.4, y: 0, frame: throwing ? N.punch : N.neutral, facing: 1 };
+			}
+			if (t < 30) return { x: 22.4, y: 0, frame: N.neutral, facing: 1, opacity: lerp(1, 0.1, span(t, 29.1, 29.4)) };
+			if (t < 30.9) return { x: 25.6, y: 0, frame: N.neutral, facing: -1, opacity: lerp(0.1, 1, span(t, 30, 30.3)) };
+			if (t < 31.05) return { x: 25.6, y: 0, frame: N.roundCh, facing: -1 };
+			if (t < 31.45) return { x: 25.6, y: 0, frame: N.roundKick, facing: -1 };
+			if (t < 31.55) return { x: 25.6, y: 0, frame: N.roundCh, facing: -1 };
+			return { x: 25.6, y: 0, frame: N.neutral, facing: -1 };
+		}
+		if (t < 39) return { x: lerp(0, 4.5, span(t, 33, 39)), y: 0, frame: steps(t, 5), facing: 1 };
+		if (t < 41.2) return { x: 4.5, y: 0, frame: N.neutral, facing: 1 };
+		if (t < 41.4) return { x: 4.5, y: 0, frame: N.crouch, facing: 1 };
+		if (t < 42.6) {
+			var k5 = span(t, 41.4, 42.6);
+			return { x: 4.5, y: 2.6 * Math.sin(k5 * Math.PI), frame: t < 42 ? N.tuck : N.airPunch, facing: 1 };
+		}
+		if (t < 42.8) return { x: 4.5, y: 0, frame: N.crouch, facing: 1 };
+		return { x: 4.5, y: 0, frame: N.neutral, facing: 1 };
+	}
+
+	function villainAt(t){
+		if (t < 14.3 || t >= 33) return null;
+		if (t < 23.45) return { x: 24, y: 0, frame: VIL.idle, facing: -1, opacity: ease(span(t, 14.3, 14.8)) };
+		if (t < 25.2) {
+			var k = span(t, 23.45, 24.2);
+			return { x: lerp(24, 27, ease(k)), y: 0.9 * Math.sin(k * Math.PI), frame: VIL.hurt, facing: -1 };
+		}
+		if (t < 28.4) {
+			var hurt = HITS.some(function(h){ return !h.big && t >= h.t && t < h.t + 0.18; });
+			return { x: 27, y: 0, frame: hurt ? VIL.hurt : VIL.idle, facing: -1 };
+		}
+		if (t < 29.3) return { x: lerp(27, 23.6, ease(span(t, 28.4, 29.3))), y: 0, frame: VIL.idle, facing: -1 };
+		if (t < 29.8) return { x: 23.6, y: 0, frame: VIL.slash, facing: -1 };
+		if (t < 30.7) return { x: 23.6, y: 0, frame: VIL.idle, facing: -1 };
+		if (t < 31.1) return { x: 23.6, y: 0, frame: VIL.idle, facing: 1 };
+		var k2 = span(t, 31.1, 32.2);
+		return { x: lerp(23.6, 19.5, k2), y: 1.6 * Math.sin(k2 * Math.PI), frame: VIL.hurt, facing: 1, spin: k2 * 3.5, opacity: 1 - span(t, 31.95, 32.25) };
+	}
+
+	function shurikenAt(i, t){
+		var s = THROWS[i];
+		if (t < s.t0 || t > s.t1) return null;
+		var k = span(t, s.t0, s.t1);
+		return { x: lerp(22.95, 26.7, k), y: lerp(1.05, s.y, k), z: 0.25, spin: (t - s.t0) * 22 };
+	}
+
+	function cameraAt(t){
+		var n, k, a;
+		if (t < 5) {
+			k = ease(span(t, 0, 5));
+			return { pos: lerpV([-26, 18, 42], [-5, 2.6, 12], k), look: lerpV([8, 8, -60], [0, 1.2, 0], k), fov: 45 };
+		}
+		if (t < 10) {
+			a = lerp(-0.9, 0.9, ease(span(t, 5, 10)));
+			return { pos: new V3(Math.sin(a) * 4.6, lerp(1.2, 1.8, span(t, 5, 10)), Math.cos(a) * 4.6), look: new V3(0, 0.9, 0), fov: 40 };
+		}
+		if (t < 14) {
+			n = ninjaAt(t);
+			return { pos: new V3(n.x - 2.5 + (t - 10) * 0.2, 0.7, 5.5), look: new V3(n.x + 1.5, 1.0, 0), fov: 50 };
+		}
+		if (t < 18) {
+			// Dolly zoom: pull back while zooming in, so the villain holds still as the world stretches
+			k = ease(span(t, 14, 18));
+			return { pos: lerpV([21.5, 1.4, 4], [17, 1.2, 10], k), look: new V3(24, 1.2, 0), fov: lerp(55, 24, k) };
+		}
+		if (t < 19.6) {
+			n = ninjaAt(t);
+			return { pos: new V3(n.x - 3, 1.0 + n.y * 0.5, 6.5), look: new V3(n.x + 1.8, 0.9 + n.y * 0.8, 0), fov: 45 };
+		}
+		if (t < 23) {
+			// Bullet time: circle around the ninja in mid-air
+			n = ninjaAt(t);
+			a = lerp(-1.1, 2.0, ease(span(t, 19.6, 23)));
+			return { pos: new V3(n.x + Math.sin(a) * 3.2, n.y + 0.9, Math.cos(a) * 3.2), look: new V3(n.x, n.y + 0.7, 0), fov: 42 };
+		}
+		if (t < 23.45) return { pos: new V3(21.5, 1.6, 9), look: new V3(22.5, 1.2, 0), fov: 45 };
+		if (t < 26.15) {
+			k = ease(span(t, 23.45, 26.15));
+			return { pos: lerpV([21.5, 1.6, 9], [22.8, 1.3, 7], k), look: lerpV([22.5, 1.2, 0], [24.5, 1.0, 0], k), fov: 45 };
+		}
+		if (t < 27.6) {
+			// Shuriken cam: ride along behind the first star
+			var s = shurikenAt(0, t);
+			return { pos: new V3(s.x - 0.9, s.y + 0.35, s.z + 0.35), look: new V3(s.x + 1.5, s.y - 0.05, s.z), fov: 55 };
+		}
+		if (t < 29.2) return { pos: new V3(25, 1.5, 7.5), look: new V3(25.3, 1.1, 0), fov: 45 };
+		if (t < 31) return { pos: new V3(24.4, 1.2, 6), look: new V3(24.4, 1.1, 0), fov: 45 };
+		if (t < 33) {
+			k = ease(span(t, 31, 33));
+			return { pos: lerpV([27.8, 0.35, 3.4], [26.6, 0.5, 3.8], k), look: lerpV([25.2, 1.3, 0], [25.4, 1.4, 0], k), fov: 40 };
+		}
+		if (t < 39) {
+			n = ninjaAt(t);
+			return { pos: lerpV([-3, 0.8, 5], [1.5, 2.5, 9], ease(span(t, 33, 39))), look: new V3(n.x, 1.0, 0), fov: 45 };
+		}
+		if (t < 41) {
+			// Crane up toward the moon
+			k = ease(span(t, 39, 41));
+			return { pos: lerpV([1.5, 2.5, 9], [2, 9, 16], k), look: lerpV([4.5, 1.0, 0], [60, 80, -300], k), fov: 45 };
+		}
+		if (t < 43.4) return { pos: new V3(4.5, 1.0, 7), look: new V3(4.5, 1.6, 0), fov: 50 };
+		k = span(t, 43.4, DURATION);
+		return { pos: new V3(lerp(-1, 1, k), 3, 22), look: new V3(3, 3.5, -20), fov: 45 };
+	}
+
+	// ---------- effects ----------
+	var smoke = [], sparks = [], pows = [];
+	PUFFS.forEach(function(){
+		for (var j = 0; j < 10; j++) {
+			var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, color: 0xe8e0f0, transparent: true, depthWrite: false }));
+			scene.add(sprite);
+			smoke.push(sprite);
+		}
+	});
+	var SPARK_COLORS = [0xffd23f, 0xff7aa8, 0xffffff];
+	HITS.forEach(function(){
+		for (var j = 0; j < 14; j++) {
+			var spark = glowSprite(glowTex, SPARK_COLORS[j % 3], 0.25);
+			scene.add(spark);
+			sparks.push(spark);
+		}
+	});
+
+	function updateEffects(t){
+		PUFFS.forEach(function(p, pi){
+			for (var j = 0; j < 10; j++) {
+				var s = smoke[pi * 10 + j], age = t - p.t;
+				s.visible = age >= 0 && age < 1.3;
+				if (!s.visible) continue;
+				var angle = hash(pi * 31 + j * 7) * Math.PI * 2, reach = 0.25 + age * (0.8 + hash(pi * 13 + j * 3) * 0.8);
+				s.position.set(p.x + Math.cos(angle) * reach, p.y + Math.sin(angle) * reach * 0.7 + age * 0.4, 0.3 + hash(j + pi * 5) * 0.4);
+				var size = 0.7 + age * 1.4;
+				s.scale.set(size, size, 1);
+				s.material.opacity = 0.85 * (1 - age / 1.3);
+			}
+		});
+		HITS.forEach(function(h, hi){
+			for (var j = 0; j < 14; j++) {
+				var sp = sparks[hi * 14 + j], age = t - h.t;
+				sp.visible = age >= 0 && age < 0.6;
+				if (!sp.visible) continue;
+				var angle = hash(hi * 17 + j * 5) * Math.PI * 2, speed = 2 + hash(hi * 7 + j * 11) * 4;
+				sp.position.set(h.x + Math.cos(angle) * speed * age, h.y + Math.sin(angle) * speed * age - 5 * age * age, 0.4);
+				sp.material.opacity = 1 - age / 0.6;
+			}
+		});
+		var bigHits = HITS.filter(function(h){ return h.big; });
+		pows.forEach(function(pow, i){
+			var h = bigHits[i], age = t - h.t;
+			pow.visible = age >= 0 && age < 0.5;
+			if (!pow.visible) return;
+			var size = age < 0.08 ? lerp(0.6, 1.4, age / 0.08) : 1.2;
+			pow.scale.set(size * 1.2, size, 1);
+			pow.position.set(h.x, h.y + 0.2, 0.5);
+		});
+	}
+
+	function updateParticles(t){
+		// Petals slow right down during bullet time
+		var pt = t - 0.85 * Math.max(0, Math.min(t - 19.6, 3.4));
+		var p = petals.geometry.attributes.position.array;
+		for (var i = 0; i < PETALS; i++) {
+			var b = petalBase[i];
+			p[i * 3] = ((b[0] + 30 - pt * 0.5 + Math.sin(pt * 0.9 + b[3] * 6.28) * 0.6) % 100 + 100) % 100 - 30;
+			p[i * 3 + 1] = ((b[1] - pt * (0.6 + b[3] * 0.5)) % 12 + 12) % 12;
+			p[i * 3 + 2] = b[2];
+		}
+		petals.geometry.attributes.position.needsUpdate = true;
+
+		var f = fireflies.geometry.attributes.position.array;
+		for (var j = 0; j < FIREFLIES; j++) {
+			var ph = hash(j * 19) * 6.28;
+			f[j * 3] = -15 + hash(j * 3) * 40 + Math.sin(t * 0.7 + ph) * 0.5;
+			f[j * 3 + 1] = 0.3 + hash(j * 7) * 3.7 + Math.cos(t * 0.9 + ph * 1.3) * 0.3;
+			f[j * 3 + 2] = -10 + hash(j * 11) * 14;
+		}
+		fireflies.geometry.attributes.position.needsUpdate = true;
+		fireflies.material.opacity = 0.65 + 0.35 * Math.sin(t * 2.3);
+	}
+
+	// ---------- compositing: letterbox, titles, flashes and fades ----------
+	function drawText(t, text, t0, t1, size, y, color){
+		if (t < t0 || t > t1) return;
+		var alpha = Math.min(span(t, t0, t0 + 0.4), 1 - span(t, t1 - 0.4, t1));
+		var pop = 1 + 0.15 * (1 - ease(span(t, t0, t0 + 0.4)));
+		out.save();
+		out.globalAlpha = alpha;
+		out.translate(WIDTH / 2, y);
+		out.scale(pop, pop);
+		out.font = size + 'px "Press Start 2P", monospace';
+		out.textAlign = "center";
+		out.textBaseline = "middle";
+		out.lineJoin = "round";
+		out.lineWidth = Math.max(4, size * 0.22);
+		out.strokeStyle = "#2b1b4a";
+		out.strokeText(text, 0, 0);
+		out.fillStyle = color;
+		out.fillText(text, 0, 0);
+		out.restore();
+	}
+
+	function composite(t){
+		out.drawImage(renderer.domElement, 0, 0, WIDTH, HEIGHT);
+
+		var flash = 0;
+		HITS.forEach(function(h){
+			var age = t - h.t;
+			if (h.big && age >= 0 && age < 0.4) flash = Math.max(flash, 0.5 * (1 - age / 0.4));
+		});
+		if (flash > 0) {
+			out.fillStyle = "rgba(255, 40, 40, " + flash + ")";
+			out.fillRect(0, 0, WIDTH, HEIGHT);
+		}
+
+		var black = 1 - span(t, 0, 0.8);
+		if (t < 33) black = Math.max(black, span(t, 32.4, 33));
+		else if (t < 33.6) black = Math.max(black, 1 - span(t, 33, 33.6));
+		if (t >= 42.8 && t < 43.4) black = 1;
+		if (t >= 43.4) black = Math.max(black, 1 - span(t, 43.4, 43.9));
+		black = Math.max(black, span(t, DURATION - 0.8, DURATION));
+		if (black > 0) {
+			out.fillStyle = "rgba(0, 0, 0, " + black + ")";
+			out.fillRect(0, 0, WIDTH, HEIGHT);
+		}
+
+		out.fillStyle = "#000";
+		out.fillRect(0, 0, WIDTH, 64);
+		out.fillRect(0, HEIGHT - 64, WIDTH, 64);
+
+		drawText(t, "NINJA ATTACK!", 0.9, 4.4, 64, HEIGHT / 2 - 30, "#ffd23f");
+		drawText(t, "ONE NINJA", 10.2, 11.8, 26, HEIGHT - 120, "#ffe8c2");
+		drawText(t, "ONE VILLAIN", 14.6, 16.6, 26, HEIGHT - 120, "#ff7a6a");
+		drawText(t, "MANY WORLDS", 33.8, 35.8, 26, HEIGHT - 120, "#cfe0ff");
+		drawText(t, "NINJA ATTACK!", 43.8, 49.4, 64, HEIGHT / 2 - 50, "#ffd23f");
+		drawText(t, "KICK. THROW. VANISH.", 44.8, 49.4, 22, HEIGHT / 2 + 30, "#ffe8c2");
+		drawText(t, "PLAY AT JOHNMAILLET.GITHUB.IO", 45.8, 49.4, 16, HEIGHT / 2 + 80, "#cfe0ff");
+	}
+
+	// ---------- one frame of the trailer at time t ----------
+	var ninja, villain, eyes, stars3d = [], forestStar;
+	function renderAt(t){
+		t = Math.max(0, Math.min(DURATION, t));
+		var inDojo = t < 33;
+		dojo.visible = inDojo;
+		forest.visible = !inDojo;
+		scene.fog = inDojo ? dojoFog : forestFog;
+
+		updateParticles(t);
+		ninja.set(ninjaAt(t));
+		var v = villainAt(t);
+		villain.set(v);
+		eyes.visible = !!v && (v.opacity === undefined || v.opacity > 0.05) && v.frame !== VIL.hurt;
+		if (eyes.visible) {
+			eyes.position.set(v.x + (v.facing || 1) * 0.02, v.y + 1.52, 0.1);
+			eyes.material.opacity = (v.opacity === undefined ? 1 : v.opacity) * (0.6 + 0.4 * Math.sin(t * 6));
+		}
+
+		stars3d.forEach(function(mesh, i){
+			var s = shurikenAt(i, t);
+			mesh.visible = !!s;
+			if (!s) return;
+			mesh.position.set(s.x, s.y, s.z);
+			mesh.rotation.set(Math.PI / 2, 0, s.spin);
+		});
+		forestStar.visible = t >= 42.1 && t < 42.8;
+		if (forestStar.visible) {
+			var k = span(t, 42.1, 42.8);
+			forestStar.position.set(lerp(4.9, 4.5, k), lerp(3.0, 1.05, k), lerp(0.3, 6.6, k * k));
+			forestStar.rotation.set(0, 0, (t - 42.1) * 25);
+		}
+
+		updateEffects(t);
+
+		var cam = cameraAt(t);
+		var shake = 0;
+		HITS.forEach(function(h){
+			var age = t - h.t;
+			if (h.big && age >= 0 && age < 0.35) shake = Math.max(shake, 0.12 * (1 - age / 0.35));
+		});
+		camera.position.copy(cam.pos);
+		camera.position.x += Math.sin(t * 91) * shake;
+		camera.position.y += Math.cos(t * 77) * shake;
+		camera.fov = cam.fov;
+		camera.updateProjectionMatrix();
+		camera.lookAt(cam.look);
+
+		renderer.render(scene, camera);
+		composite(t);
+	}
+
+	// ---------- sound: the game's chiptune songs plus sound effects, all recordable ----------
+	var audio = (function(){
+		var AC = window.AudioContext || window.webkitAudioContext;
+		var ctx = new AC();
+		var master = ctx.createGain();
+		master.connect(ctx.destination);
+		var recordable = ctx.createMediaStreamDestination();
+		master.connect(recordable);
+		var musicBus = ctx.createGain();
+		musicBus.connect(master);
+		var _ = null, waves = {}, punch = null, punchOffset = 0, song = null, step = 0, nextT = 0, startAt = 0, timer = null;
+
+		var noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.5), ctx.sampleRate);
+		var data = noiseBuf.getChannelData(0);
+		for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+
+		function pulseWave(duty){
+			var n = 32, real = new Float32Array(n), imag = new Float32Array(n);
+			for (var k = 1; k < n; k++) real[k] = 2 * Math.sin(k * Math.PI * duty) / (k * Math.PI);
+			return ctx.createPeriodicWave(real, imag);
+		}
+		waves.lead = pulseWave(0.25);
+		waves.echo = pulseWave(0.125);
+		waves.flute = pulseWave(0.5);
+
+		function mtof(m){ return 440 * Math.pow(2, (m - 69) / 12); }
+
+		function tone(wave, freq, t, dur, vol, cutoff, dest){
+			var o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+			if (typeof wave === "string") o.type = wave;
+			else o.setPeriodicWave(wave);
+			o.frequency.value = freq;
+			f.type = "lowpass";
+			f.frequency.value = cutoff;
+			g.gain.setValueAtTime(0.0001, t);
+			g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
+			g.gain.setValueAtTime(vol, t + dur * 0.6);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+			o.connect(f);
+			f.connect(g);
+			g.connect(dest || musicBus);
+			if (song && dur > song.step * 2.5) {
+				var lfo = ctx.createOscillator(), depth = ctx.createGain();
+				lfo.frequency.value = 6;
+				depth.gain.setValueAtTime(0, t);
+				depth.gain.linearRampToValueAtTime(freq * 0.015, t + 0.18);
+				lfo.connect(depth);
+				depth.connect(o.frequency);
+				lfo.start(t);
+				lfo.stop(t + dur + 0.02);
+			}
+			o.start(t);
+			o.stop(t + dur + 0.02);
+		}
+
+		function noise(t, dur, vol, type, freq, dest, sweepTo){
+			var src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+			src.buffer = noiseBuf;
+			f.type = type;
+			f.frequency.setValueAtTime(freq, t);
+			if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t + dur);
+			g.gain.setValueAtTime(vol, t);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+			src.connect(f);
+			f.connect(g);
+			g.connect(dest || musicBus);
+			src.start(t);
+			src.stop(t + dur + 0.02);
+		}
+
+		function drum(t, from, to, dur, vol, dest){
+			var o = ctx.createOscillator(), g = ctx.createGain();
+			o.frequency.setValueAtTime(from, t);
+			o.frequency.exponentialRampToValueAtTime(to, t + dur * 0.8);
+			g.gain.setValueAtTime(vol, t);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+			o.connect(g);
+			g.connect(dest || musicBus);
+			o.start(t);
+			o.stop(t + dur + 0.02);
+		}
+
+		function noteLength(melody, s, maxSteps){
+			var len = 1;
+			while (len < maxSteps && melody[(s + len) % melody.length] === null) len++;
+			return len * song.step * 0.92;
+		}
+
+		var SONGS = {
+			dojo: {
+				bpm: 150,
+				melody: [
+					74,_,70,69, 67,_,69,70, 74,_,75,74, 70,_,69,_,
+					67,_,69,70, 69,67,63,_, 62,_,63,67, 69,_,_,_,
+					74,_,70,69, 67,_,69,70, 75,_,79,75, 74,_,70,_,
+					69,70,69,67, 63,_,67,_, 62,_,_,_, 62,_,_,_,
+					81,_,79,_, 75,_,74,_, 79,_,75,74, 70,_,_,_,
+					74,75,74,70, 69,_,67,_, 69,70,74,75, 79,_,_,_,
+					81,_,82,81, 79,_,75,_, 74,75,79,_, 75,74,70,_,
+					69,_,70,_, 74,_,69,_, 62,_,_,_, 62,63,67,69
+				],
+				bassRoots: [38, 31, 39, 33, 39, 38, 31, 33],
+				play: function(s, t){
+					var m = this.melody, len = m.length, bar = Math.floor(s / 16) % 8, i = s % 16, note = m[s % len], sectionB = bar >= 4;
+					if (note !== null) tone(waves.lead, mtof(note), t, noteLength(m, s % len, 4), 0.3, 6000);
+					var echoNote = m[(s - 3 + len) % len];
+					if (echoNote !== null && s >= 3) tone(waves.echo, mtof(echoNote), t, this.step * 1.4, 0.1, 4000);
+					if (i % 2 === 0) tone("triangle", mtof(this.bassRoots[bar] + (i % 4 === 2 ? 12 : 0)), t, this.step * 1.7, 0.75, 8000);
+					if (i === 0 || i === 8 || (sectionB && i === 10)) drum(t, 150, 40, 0.15, 0.8);
+					if (i === 4 || i === 12) noise(t, 0.13, 0.55, "bandpass", 1800);
+					if (i % 2 === 0) noise(t, 0.03, 0.16, "highpass", 7000);
+					if (sectionB && i === 15) noise(t, 0.06, 0.35, "bandpass", 2600);
+				}
+			},
+			forest: {
+				bpm: 96,
+				melody: [
+					74,_,_,_, 70,_,69,_, 65,_,_,_, 69,_,_,_,
+					70,_,69,_, 65,_,64,_, 62,_,_,_, _,_,_,_,
+					77,_,_,_, 76,_,74,_, 70,_,_,_, 74,_,76,_,
+					77,_,76,_, 74,_,70,_, 69,_,_,_, _,_,_,_,
+					81,_,_,_, 82,_,81,_, 77,_,_,_, 76,_,_,_,
+					74,_,76,_, 77,_,74,_, 70,_,_,_, 69,_,_,_,
+					65,_,69,_, 70,_,74,_, 76,_,_,_, 77,_,76,_,
+					74,_,_,_, _,_,_,_, 62,_,_,_, _,_,_,_
+				],
+				bassRoots: [38, 34, 41, 33, 38, 34, 41, 38],
+				play: function(s, t){
+					var m = this.melody, len = m.length, bar = Math.floor(s / 16) % 8, i = s % 16, note = m[s % len];
+					if (note !== null) tone(waves.flute, mtof(note), t, noteLength(m, s % len, 8), 0.28, 1800);
+					var echoNote = m[(s - 6 + len) % len];
+					if (echoNote !== null && s >= 6) tone(waves.echo, mtof(echoNote + 12), t, this.step * 2, 0.05, 3000);
+					if (i === 0) tone("triangle", mtof(this.bassRoots[bar]), t, this.step * 7.5, 0.6, 6000);
+					if (i === 8) tone("triangle", mtof(this.bassRoots[bar] + 7), t, this.step * 7.5, 0.5, 6000);
+					if (i === 0 || i === 11) drum(t, 130, 55, 0.35, 0.7);
+					if (i === 4 || i === 12) noise(t, 0.03, 0.07, "highpass", 8000);
+					if (bar >= 4 && i === 14) noise(t, 0.04, 0.12, "bandpass", 3000);
+				}
+			}
+		};
+		for (var name in SONGS) SONGS[name].step = 60 / SONGS[name].bpm / 4;
+
+		// The punch sound effect (the voice recording), with its quiet lead-in skipped
+		fetch(AUDIO + "punch.Wav")
+			.then(function(r){ if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+			.then(function(d){ return new Promise(function(res, rej){ ctx.decodeAudioData(d, res, rej); }); })
+			.then(function(buf){
+				var ch = buf.getChannelData(0), win = Math.floor(buf.sampleRate * 0.01);
+				for (var i = 0; i + win <= ch.length; i += win) {
+					var sum = 0;
+					for (var j = i; j < i + win; j++) sum += ch[j] * ch[j];
+					if (Math.sqrt(sum / win) > 0.03) { punchOffset = Math.max(0, i / buf.sampleRate - 0.04); break; }
+				}
+				punch = buf;
+			})
+			.catch(function(){});
+
+		function blip(t, from, to, dur){
+			var o = ctx.createOscillator(), g = ctx.createGain();
+			o.type = "square";
+			o.frequency.setValueAtTime(from, t);
+			o.frequency.exponentialRampToValueAtTime(to, t + dur * 0.8);
+			g.gain.setValueAtTime(0.08, t);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+			o.connect(g);
+			g.connect(master);
+			o.start(t);
+			o.stop(t + dur + 0.02);
+		}
+
+		function voice(t){
+			if (!punch) return;
+			var src = ctx.createBufferSource();
+			src.buffer = punch;
+			src.connect(master);
+			src.start(t, punchOffset);
+		}
+
+		// Every sound effect in the script, scheduled against the trailer's start time
+		function scheduleEffects(t0){
+			PUFFS.forEach(function(p){ noise(t0 + p.t, 0.5, 0.35, "lowpass", 900, master); });
+			drum(t0 + 14.3, 110, 45, 0.6, 0.9, master);
+			drum(t0 + 14.55, 110, 45, 0.6, 0.7, master);
+			blip(t0 + 19.1, 220, 880, 0.2);
+			blip(t0 + 41.4, 220, 880, 0.2);
+			HITS.forEach(function(h){
+				if (h.big) voice(t0 + h.t);
+				else {
+					noise(t0 + h.t, 0.08, 0.35, "bandpass", 5000, master);
+					tone("square", 2400, t0 + h.t, 0.06, 0.05, 6000, master);
+				}
+			});
+			THROWS.forEach(function(s){ blip(t0 + s.t0, 1400, 300, 0.15); });
+			blip(t0 + 42.1, 1400, 300, 0.15);
+			noise(t0 + 29.3, 0.25, 0.5, "bandpass", 800, master, 3000);
+		}
+
+		// Music follows the trailer clock: the dojo song, then the forest song from 33s
+		function schedule(){
+			var now = ctx.currentTime - startAt;
+			while (nextT < now + 0.15 && nextT < DURATION) {
+				if (nextT >= 33 && song !== SONGS.forest) {
+					song = SONGS.forest;
+					step = 0;
+				}
+				song.play(step, startAt + nextT);
+				nextT += song.step;
+				step++;
+			}
+		}
+
+		return {
+			stream: recordable.stream,
+			// Starts music and effects; returns the audio-clock time the trailer starts at
+			start: function(){
+				ctx.resume();
+				clearInterval(timer);
+				startAt = ctx.currentTime + 0.3;
+				song = SONGS.dojo;
+				step = 0;
+				nextT = 0;
+				musicBus.gain.cancelScheduledValues(0);
+				musicBus.gain.setValueAtTime(0.12, startAt);
+				musicBus.gain.setValueAtTime(0.12, startAt + DURATION - 1.5);
+				musicBus.gain.linearRampToValueAtTime(0.0001, startAt + DURATION);
+				scheduleEffects(startAt);
+				timer = setInterval(schedule, 25);
+				return startAt;
+			},
+			stop: function(){
+				clearInterval(timer);
+			},
+			now: function(){
+				return ctx.currentTime;
+			}
+		};
+	})();
+
+	// ---------- playback and recording ----------
+	var startAt = 0, playing = false, recorder = null, chunks = [];
+
+	function tick(){
+		var t = audio.now() - startAt;
+		if (t >= DURATION) {
+			renderAt(DURATION);
+			playing = false;
+			audio.stop();
+			if (recorder) setTimeout(function(){ recorder.stop(); }, 300);
+			controls.hidden = false;
+			return;
+		}
+		renderAt(Math.max(0, t));
+		requestAnimationFrame(tick);
+	}
+
+	function play(record){
+		if (playing) return;
+		saveLink.hidden = true;
+		if (record && !startRecording()) return;
+		playing = true;
+		controls.hidden = true;
+		startAt = audio.start();
+		requestAnimationFrame(tick);
+	}
+
+	function startRecording(){
+		var types = ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+		var mime = window.MediaRecorder && types.filter(function(m){ return MediaRecorder.isTypeSupported(m); })[0];
+		if (!mime) {
+			statusEl.textContent = "This browser can't record video. Try Chrome or Edge.";
+			return false;
+		}
+		var tracks = screen.captureStream(30).getVideoTracks().concat(audio.stream.getAudioTracks());
+		chunks = [];
+		recorder = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: 8000000 });
+		recorder.ondataavailable = function(e){ if (e.data && e.data.size) chunks.push(e.data); };
+		recorder.onstop = function(){
+			var blob = new Blob(chunks, { type: mime.split(";")[0] });
+			var extension = mime.indexOf("mp4") >= 0 ? "mp4" : "webm";
+			saveLink.href = URL.createObjectURL(blob);
+			saveLink.download = "ninja-attack-trailer." + extension;
+			saveLink.hidden = false;
+			statusEl.textContent = "Video ready (" + (blob.size / 1048576).toFixed(1) + " MB, " + extension.toUpperCase() + ")";
+			recorder = null;
+		};
+		recorder.start(1000);
+		statusEl.textContent = "Recording… keep this tab visible until it finishes.";
+		return true;
+	}
+
+	playBtn.addEventListener("click", function(){ play(false); });
+	recordBtn.addEventListener("click", function(){ play(true); });
+
+	// ---------- load the sprites, then show the opening frame (or ?t=seconds) ----------
+	function loadImage(src){
+		return new Promise(function(resolve, reject){
+			var img = new Image();
+			img.onload = function(){ resolve(img); };
+			img.onerror = reject;
+			img.src = src;
+		});
+	}
+
+	function crop(img, sx, sy, sw, sh, cw, ch){
+		var c = document.createElement("canvas");
+		c.width = cw;
+		c.height = ch;
+		c.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+		return c;
+	}
+
+	Promise.all([
+		loadImage(IMAGES + "Ninja_Sprites.gif"),
+		loadImage(IMAGES + "Ninja_Moves.png"),
+		loadImage(IMAGES + "Villain_Sprites.png"),
+		document.fonts ? document.fonts.load('32px "Press Start 2P"').catch(function(){}) : null
+	]).then(function(loaded){
+		var sheet = loaded[0], moves = loaded[1], villainSheet = loaded[2];
+		// Ninja frames, all in 64x50 cells with the torso lined up (the original frames are 46px wide)
+		var ninjaFrames = [85, 0, 126, 40].map(function(x){ return crop(sheet, x, 0, 46, 50, 64, 50); });
+		for (var i = 0; i < 9; i++) ninjaFrames.push(crop(moves, i * 64, 0, 64, 50, 64, 50));
+		ninja = makeActor(ninjaFrames, 0.032, 14.5, 48);
+		var villainFrames = [0, 1, 2].map(function(i){ return crop(villainSheet, i * 80, 0, 80, 64, 80, 64); });
+		villain = makeActor(villainFrames, 0.031, 32.5, 61);
+		eyes = glowSprite(glowTex, 0xff3a2a, 0.9);
+		scene.add(eyes);
+
+		var powTexture = toTexture(crop(sheet, 175, 0, 60, 50, 60, 50), true);
+		[0, 1].forEach(function(){
+			var pow = new THREE.Sprite(new THREE.SpriteMaterial({ map: powTexture, transparent: true, alphaTest: 0.4, depthTest: false }));
+			pow.renderOrder = 10;
+			scene.add(pow);
+			pows.push(pow);
+		});
+		stars3d = THROWS.map(starMesh);
+		forestStar = starMesh();
+
+		window.trailer = { renderAt: renderAt, duration: DURATION };
+		var still = parseFloat(new URLSearchParams(location.search).get("t"));
+		renderAt(isFinite(still) ? still : 2.5);
+		playBtn.disabled = recordBtn.disabled = false;
+		statusEl.textContent = "";
+	}).catch(function(err){
+		statusEl.textContent = "Couldn't load the sprites (" + err + ")";
+	});
+})();
+</script>
+</body>
+</html>

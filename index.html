@@ -138,6 +138,7 @@ html, body {
 		<option value="map">Village Map (top-down)</option>
 		<option value="dojo">Sunset Dojo</option>
 		<option value="forest">Moonlit Bamboo Forest</option>
+		<option value="trailer">&#127916; Trailer (3D video)</option>
 	</select>
 </label>
 <div id="hint">&larr; &rarr;: walk &middot; Shift: run &middot; Space: jump (hold an arrow to jump sideways) &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; attack mid-jump &middot; kick the gate for ninja stars, T: throw &middot; hold S: stealth &middot; other keys: punch &middot; walk left from a scene's start: village map</div>
@@ -2154,6 +2155,11 @@ html, body {
 	var sceneSelect = document.getElementById("sceneSelect");
 	var currentScene = "dojo";
 
+	// Coming back from the trailer with the browser's Back button: show the scene that's actually on
+	window.addEventListener("pageshow", function(){
+		sceneSelect.value = currentScene;
+	});
+
 	// name: "map", "dojo" or "forest". fromScene: the scene being left, so the village map can
 	// put the ninja next to the way back into it.
 	function chooseScene(name, fromScene){
@@ -2182,6 +2188,11 @@ html, body {
 	}
 
 	sceneSelect.addEventListener("change", function(){
+		// The trailer is its own page
+		if (sceneSelect.value === "trailer") {
+			location.href = "trailer.html";
+			return;
+		}
 		chooseScene(sceneSelect.value);
 		music.start();
 		// Hand the keyboard back to the game
