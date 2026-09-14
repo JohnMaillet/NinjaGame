@@ -58,6 +58,34 @@ html, body {
   pointer-events: none;
 }
 
+#front {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#musicBtn, #hint {
+  z-index: 6;
+}
+
+#starCount {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  padding: 6px 14px;
+  font: 14px/1.2 "Segoe UI", system-ui, sans-serif;
+  color: #ffe8c2;
+  background: rgba(43, 27, 74, 0.75);
+  border: 1px solid rgba(255, 220, 180, 0.5);
+  border-radius: 999px;
+}
+#starCount[hidden] {
+  display: none;
+}
+
 #moves {
   position: absolute;
   width: 64px;
@@ -70,6 +98,7 @@ html, body {
 </head>
 <body>
 <canvas id="scene"></canvas>
+<canvas id="front"></canvas>
 <div class="imgContainer">
 	<img id="ninja" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
@@ -78,20 +107,27 @@ html, body {
 	<img id="pow" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
 <button id="musicBtn" type="button">&#9835; Music: On</button>
-<div id="hint">Arrows: move &middot; Space: jump &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; hold S: stealth &middot; other keys: punch</div>
+<div id="starCount" hidden></div>
+<div id="hint">&larr; &rarr;: walk &middot; Shift: run &middot; Space: jump (hold an arrow to jump sideways) &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; attack mid-jump &middot; kick the gate for ninja stars, T: throw &middot; hold S: stealth &middot; other keys: punch</div>
 </body>
 
 <script>
-	// Sunset dojo backdrop: sky, sun, Mt. Fuji, pagoda, torii gate, cherry tree,
-	// falling petals and swinging lanterns. Layers shift slightly with the ninja (parallax).
+	// ---- Side-scrolling sunset dojo ----
+	// The world scrolls sideways as the ninja walks, like an old side-scroller. Each layer moves at
+	// its own speed ("depth", where 1 = the path the ninja walks on): the sky stays put, mountains
+	// creep by, torii gates move faster, lanterns and bamboo beside the path faster still, and
+	// cherry trees and grass drawn in front of the ninja move fastest. That difference sells the depth.
 	var scene = (function(){
 		var canvas = document.getElementById("scene");
 		var ctx = canvas.getContext("2d");
+		var frontCanvas = document.getElementById("front");
+		var fctx = frontCanvas.getContext("2d");
 		var ninja = document.getElementById("ninja");
-		var W, H, horizon, scale;
-		var stars = [], clouds = [], farRidge = [], midRidge = [];
-		var branches = [], blossoms = [], petals = [], sparks = [];
-		var flash = 0, shake = 0, parallax = 0, time = 0, last = performance.now();
+		var W, H, horizon, groundY, scale;
+		var cameraX = 0, lastCameraX = 0;
+		var stars = [], clouds = [], petals = [], sparks = [], trees = [];
+		var shuriken = [], thrown = [], collectHandler = null, gateShake = 0, lastGateKick = -1;
+		var flash = 0, shake = 0, time = 0, last = performance.now(), shadowY = null;
 
 		function seeded(seed){
 			return function(){
@@ -100,32 +136,35 @@ html, body {
 			};
 		}
 
-		function ridge(rnd, base, amp, n){
-			var pts = [];
-			for (var i = 0; i <= n; i++) {
-				pts.push({ x: -150 + (W + 300) * i / n, y: base - rnd() * amp });
-			}
-			return pts;
+		// Repeatable pseudo-random number in [0, 1) for a given number
+		function hash(n){
+			var x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+			return x - Math.floor(x);
 		}
 
-		function growBranch(rnd, x, y, angle, len, width, depth){
-			var x2 = x + Math.cos(angle) * len;
-			var y2 = y + Math.sin(angle) * len;
-			branches.push({ x1: x, y1: y, x2: x2, y2: y2, w: width });
-			if (depth === 0) {
-				blossoms.push({ x: x2, y: y2, r: (12 + rnd() * 10) * scale });
-				return;
-			}
-			if (depth < 3) {
-				blossoms.push({ x: (x + x2) / 2, y: (y + y2) / 2, r: (9 + rnd() * 7) * scale });
-			}
-			growBranch(rnd, x2, y2, angle - 0.3 - rnd() * 0.3, len * 0.74, width * 0.66, depth - 1);
-			growBranch(rnd, x2, y2, angle + 0.3 + rnd() * 0.3, len * 0.7, width * 0.66, depth - 1);
+		// A cherry tree shape in local units (trunk base at 0, 0; about 450 units tall)
+		function makeTree(seed){
+			var rnd = seeded(seed), shape = { branches: [], blossoms: [] };
+			(function grow(x, y, angle, len, width, depth){
+				var x2 = x + Math.cos(angle) * len;
+				var y2 = y + Math.sin(angle) * len;
+				shape.branches.push({ x1: x, y1: y, x2: x2, y2: y2, w: width });
+				if (depth === 0) {
+					shape.blossoms.push({ x: x2, y: y2, r: 16 + rnd() * 12 });
+					return;
+				}
+				if (depth < 3) {
+					shape.blossoms.push({ x: (x + x2) / 2, y: (y + y2) / 2, r: 12 + rnd() * 9 });
+				}
+				grow(x2, y2, angle - 0.3 - rnd() * 0.3, len * 0.74, width * 0.66, depth - 1);
+				grow(x2, y2, angle + 0.3 + rnd() * 0.3, len * 0.7, width * 0.66, depth - 1);
+			})(0, 0, -Math.PI / 2 + (rnd() - 0.5) * 0.5, 150, 24, 6);
+			return shape;
 		}
 
 		function newPetal(rnd, anywhere){
 			return {
-				x: anywhere ? rnd() * W : W * (0.55 + rnd() * 0.55),
+				x: anywhere ? rnd() * W : W * (0.3 + rnd() * 0.8),
 				y: anywhere ? rnd() * H : -20 + rnd() * H * 0.4,
 				vx: -30 - rnd() * 40,
 				vy: 25 + rnd() * 35,
@@ -136,16 +175,22 @@ html, body {
 			};
 		}
 
+		function sizeCanvas(c, context, dpr){
+			c.width = Math.round(W * dpr);
+			c.height = Math.round(H * dpr);
+			c.style.width = W + "px";
+			c.style.height = H + "px";
+			context.setTransform(dpr, 0, 0, dpr, 0, 0);
+		}
+
 		function resize(){
 			var dpr = window.devicePixelRatio || 1;
 			W = window.innerWidth;
 			H = window.innerHeight;
-			canvas.width = Math.round(W * dpr);
-			canvas.height = Math.round(H * dpr);
-			canvas.style.width = W + "px";
-			canvas.style.height = H + "px";
-			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+			sizeCanvas(canvas, ctx, dpr);
+			sizeCanvas(frontCanvas, fctx, dpr);
 			horizon = H * 0.68;
+			groundY = H * 0.8;
 			scale = Math.min(W, H) / 800;
 
 			var rnd = seeded(7);
@@ -157,35 +202,43 @@ html, body {
 			for (var c = 0; c < 6; c++) {
 				clouds.push({ x: rnd() * W, y: H * 0.14 + rnd() * (horizon - H * 0.38), w: 120 + rnd() * 220, h: 6 + rnd() * 8, v: 4 + rnd() * 10 });
 			}
-			farRidge = ridge(rnd, horizon - H * 0.07, H * 0.09, 16);
-			midRidge = ridge(rnd, horizon - H * 0.015, H * 0.05, 24);
-
-			branches = [];
-			blossoms = [];
-			growBranch(rnd, W * 0.95, H + 10, -Math.PI / 2 - 0.35, H * 0.22, 26 * scale, 6);
-
+			if (trees.length === 0) {
+				for (var t = 0; t < 3; t++) trees.push(makeTree(11 + t * 17));
+			}
 			if (petals.length === 0) {
 				for (var p = 0; p < 50; p++) petals.push(newPetal(Math.random, true));
 			}
 		}
 
-		function drawRidge(pts, color, dx){
+		// Calls draw(screenX, r1, r2) for every prop slot of a layer that's near the screen.
+		// Slots repeat forever, and r1/r2 are stable random numbers for that slot.
+		function eachProp(depth, spacing, margin, seed, draw){
+			var off = cameraX * depth;
+			var first = Math.floor((off - margin - spacing) / spacing);
+			var lastSlot = Math.floor((off + W + margin) / spacing);
+			for (var i = first; i <= lastSlot; i++) {
+				var r1 = hash(i * 13 + seed), r2 = hash(i * 7 + seed * 31);
+				draw(i * spacing + r1 * spacing * 0.5 - off, r1, r2);
+			}
+		}
+
+		// Rolling hills that go on forever as the camera moves
+		function drawHills(depth, base, amp, seed, color){
+			var off = cameraX * depth;
 			ctx.fillStyle = color;
 			ctx.beginPath();
-			ctx.moveTo(pts[0].x + dx, H);
-			ctx.lineTo(pts[0].x + dx, pts[0].y);
-			for (var i = 1; i < pts.length; i++) {
-				var mx = (pts[i - 1].x + pts[i].x) / 2 + dx;
-				var my = (pts[i - 1].y + pts[i].y) / 2;
-				ctx.quadraticCurveTo(pts[i - 1].x + dx, pts[i - 1].y, mx, my);
+			ctx.moveTo(-20, H);
+			for (var sx = -20; sx <= W + 20; sx += 10) {
+				var x = sx + off;
+				var wave = 0.5 + 0.28 * Math.sin(x * 0.004 + seed) + 0.14 * Math.sin(x * 0.011 + seed * 2.3) + 0.08 * Math.sin(x * 0.027 + seed * 5.1);
+				ctx.lineTo(sx, base - amp * wave);
 			}
-			ctx.lineTo(pts[pts.length - 1].x + dx, H);
+			ctx.lineTo(W + 20, H);
 			ctx.closePath();
 			ctx.fill();
 		}
 
-		function drawFuji(dx){
-			var cx = W * 0.64 + dx;
+		function drawFuji(cx){
 			var h = H * 0.36;
 			var bw = Math.min(W * 0.34, h * 1.9);
 			var peak = horizon - h;
@@ -216,6 +269,8 @@ html, body {
 
 		function drawPagoda(x, baseY, s, color){
 			ctx.fillStyle = color;
+			// Mound so the pagoda never floats above a dip in the hills
+			ctx.fillRect(x - 34 * s, baseY, 68 * s, H * 0.06);
 			var y = baseY;
 			for (var k = 0; k < 5; k++) {
 				var tw = (64 - k * 9) * s;
@@ -258,93 +313,236 @@ html, body {
 			ctx.fill();
 		}
 
-		function drawTree(dx){
-			ctx.lineCap = "round";
-			ctx.strokeStyle = "#3d2230";
-			for (var i = 0; i < branches.length; i++) {
-				var b = branches[i];
-				ctx.lineWidth = Math.max(1, b.w);
-				ctx.beginPath();
-				ctx.moveTo(b.x1 + dx, b.y1);
-				ctx.lineTo(b.x2 + dx, b.y2);
-				ctx.stroke();
+		function drawTree(g, shape, x, baseY, s){
+			g.save();
+			g.translate(x, baseY);
+			g.scale(s, s);
+			g.lineCap = "round";
+			g.strokeStyle = "#3d2230";
+			for (var i = 0; i < shape.branches.length; i++) {
+				var b = shape.branches[i];
+				g.lineWidth = Math.max(1 / s, b.w);
+				g.beginPath();
+				g.moveTo(b.x1, b.y1);
+				g.lineTo(b.x2, b.y2);
+				g.stroke();
 			}
 			var pinks = ["#f48fb1", "#f7a8c4", "#ffd1e0"];
-			for (var j = 0; j < blossoms.length; j++) {
-				var bl = blossoms[j];
+			for (var j = 0; j < shape.blossoms.length; j++) {
+				var bl = shape.blossoms[j];
 				for (var k = 0; k < 3; k++) {
-					ctx.fillStyle = pinks[k];
-					ctx.beginPath();
-					ctx.arc(bl.x + dx + (k - 1) * bl.r * 0.45, bl.y - k * bl.r * 0.3, bl.r * (1 - k * 0.22), 0, Math.PI * 2);
-					ctx.fill();
+					g.fillStyle = pinks[k];
+					g.beginPath();
+					g.arc(bl.x + (k - 1) * bl.r * 0.45, bl.y - k * bl.r * 0.3, bl.r * (1 - k * 0.22), 0, Math.PI * 2);
+					g.fill();
+				}
+			}
+			g.restore();
+		}
+
+		function drawStoneLantern(x, baseY, s){
+			var glow = ctx.createRadialGradient(x, baseY - 56 * s, 2, x, baseY - 56 * s, 34 * s);
+			glow.addColorStop(0, "rgba(255, 200, 110, 0.45)");
+			glow.addColorStop(1, "rgba(255, 200, 110, 0)");
+			ctx.fillStyle = glow;
+			ctx.fillRect(x - 34 * s, baseY - 90 * s, 68 * s, 68 * s);
+			ctx.fillStyle = "#6f6275";
+			ctx.fillRect(x - 16 * s, baseY - 8 * s, 32 * s, 8 * s);
+			ctx.fillRect(x - 5 * s, baseY - 40 * s, 10 * s, 32 * s);
+			ctx.fillRect(x - 14 * s, baseY - 46 * s, 28 * s, 6 * s);
+			ctx.fillRect(x - 11 * s, baseY - 66 * s, 22 * s, 20 * s);
+			ctx.fillStyle = "#ffd27a";
+			ctx.fillRect(x - 5 * s, baseY - 62 * s, 10 * s, 12 * s);
+			ctx.fillStyle = "#5a4e60";
+			ctx.beginPath();
+			ctx.moveTo(x - 22 * s, baseY - 66 * s);
+			ctx.lineTo(x + 22 * s, baseY - 66 * s);
+			ctx.lineTo(x + 8 * s, baseY - 78 * s);
+			ctx.lineTo(x - 8 * s, baseY - 78 * s);
+			ctx.closePath();
+			ctx.fill();
+			ctx.fillRect(x - 3 * s, baseY - 86 * s, 6 * s, 8 * s);
+		}
+
+		function drawBamboo(g, x, baseY, s, r){
+			var stalks = 3 + Math.floor(r * 3);
+			for (var i = 0; i < stalks; i++) {
+				var sx = x + (i - stalks / 2) * 11 * s;
+				var h = (130 + hash(i * 5 + r * 1000) * 90) * s;
+				g.fillStyle = i % 2 ? "#5f8c46" : "#4d7a3a";
+				g.fillRect(sx - 3.5 * s, baseY - h, 7 * s, h);
+				g.fillStyle = "rgba(30, 50, 20, 0.45)";
+				for (var n = baseY - 28 * s; n > baseY - h; n -= 28 * s) g.fillRect(sx - 4 * s, n, 8 * s, 2 * s);
+				g.fillStyle = "#6fa052";
+				for (var l = 0; l < 3; l++) {
+					g.beginPath();
+					g.ellipse(sx + (l - 1) * 9 * s, baseY - h + l * 10 * s, 11 * s, 3 * s, (l - 1) * 0.6, 0, Math.PI * 2);
+					g.fill();
 				}
 			}
 		}
 
-		function drawLanterns(){
-			var p0 = { x: -10, y: 16 }, p1 = { x: W / 2, y: 70 }, p2 = { x: W + 10, y: 16 };
+		function drawBush(x, baseY, s){
+			ctx.fillStyle = "#5b7d44";
+			[[-18, -14, 18], [0, -22, 22], [18, -13, 17]].forEach(function(b){
+				ctx.beginPath();
+				ctx.arc(x + b[0] * s, baseY + b[1] * s, b[2] * s, 0, Math.PI * 2);
+				ctx.fill();
+			});
+			ctx.fillStyle = "#f7a8c4";
+			for (var i = 0; i < 5; i++) {
+				ctx.beginPath();
+				ctx.arc(x + (i * 11 - 22) * s, baseY - (18 + (i % 2) * 10) * s, 2.5 * s, 0, Math.PI * 2);
+				ctx.fill();
+			}
+		}
+
+		function drawFence(x, baseY, s){
+			ctx.fillStyle = "#6b4a3a";
+			ctx.fillRect(x - 60 * s, baseY - 44 * s, 6 * s, 44 * s);
+			ctx.fillRect(x + 54 * s, baseY - 44 * s, 6 * s, 44 * s);
+			ctx.fillRect(x - 64 * s, baseY - 38 * s, 128 * s, 5 * s);
+			ctx.fillRect(x - 64 * s, baseY - 22 * s, 128 * s, 5 * s);
+		}
+
+		// The kickable torii gate standing on the path in the first screen
+		function gate(){
+			return { x: W * 0.66 - cameraX, base: groundY + 6, h: H * 0.26 };
+		}
+
+		function drawShuriken(g, x, y, r, rot){
+			g.save();
+			g.translate(x, y);
+			g.rotate(rot);
+			g.fillStyle = "#3b3f4a";
+			g.beginPath();
+			for (var i = 0; i < 8; i++) {
+				var a = i * Math.PI / 4, reach = i % 2 ? r * 0.35 : r;
+				g.lineTo(Math.cos(a) * reach, Math.sin(a) * reach);
+			}
+			g.closePath();
+			g.fill();
+			g.strokeStyle = "rgba(220, 225, 235, 0.8)";
+			g.lineWidth = 1;
+			g.stroke();
+			g.fillStyle = "#c9ccd6";
+			g.beginPath();
+			g.arc(0, 0, r * 0.18, 0, Math.PI * 2);
+			g.fill();
+			g.restore();
+		}
+
+		// The stone path the ninja walks on; its tile seams move exactly with the ninja
+		function drawPath(){
+			var top = groundY - 4, h = Math.max(16, 22 * scale);
+			ctx.fillStyle = "#dcb98f";
+			ctx.fillRect(-20, top, W + 40, h);
+			ctx.fillStyle = "rgba(120, 70, 50, 0.35)";
+			ctx.fillRect(-20, top, W + 40, 2);
+			ctx.fillRect(-20, top + h - 2, W + 40, 2);
+			var tile = 56, offset = ((cameraX % tile) + tile) % tile;
+			ctx.fillStyle = "rgba(120, 70, 50, 0.28)";
+			for (var tx = -offset; tx < W + tile; tx += tile) ctx.fillRect(Math.round(tx), top + 2, 2, h - 4);
+		}
+
+		function drawLantern(x, y, i){
+			ctx.save();
+			ctx.translate(x, y);
+			ctx.rotate(Math.sin(time * 1.4 + i * 1.7) * 0.09);
+
+			var glow = ctx.createRadialGradient(0, 24, 4, 0, 24, 44);
+			glow.addColorStop(0, "rgba(255, 190, 90, 0.45)");
+			glow.addColorStop(1, "rgba(255, 190, 90, 0)");
+			ctx.fillStyle = glow;
+			ctx.fillRect(-44, -20, 88, 88);
+
 			ctx.strokeStyle = "rgba(40, 20, 30, 0.8)";
 			ctx.lineWidth = 1.5;
 			ctx.beginPath();
-			ctx.moveTo(p0.x, p0.y);
-			ctx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y);
+			ctx.moveTo(0, 0);
+			ctx.lineTo(0, 10);
 			ctx.stroke();
-
-			var spots = [0.12, 0.3, 0.5, 0.7];
-			for (var i = 0; i < spots.length; i++) {
-				var t = spots[i];
-				var x = (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x;
-				var y = (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * p1.y + t * t * p2.y;
-				ctx.save();
-				ctx.translate(x, y);
-				ctx.rotate(Math.sin(time * 1.4 + i * 1.7) * 0.09);
-
-				var glow = ctx.createRadialGradient(0, 24, 4, 0, 24, 44);
-				glow.addColorStop(0, "rgba(255, 190, 90, 0.45)");
-				glow.addColorStop(1, "rgba(255, 190, 90, 0)");
-				ctx.fillStyle = glow;
-				ctx.fillRect(-44, -20, 88, 88);
-
-				ctx.strokeStyle = "rgba(40, 20, 30, 0.8)";
+			ctx.fillStyle = "#2a1a22";
+			ctx.fillRect(-6, 9, 12, 4);
+			ctx.fillRect(-6, 37, 12, 4);
+			ctx.fillStyle = "#e2483c";
+			ctx.beginPath();
+			ctx.ellipse(0, 25, 13, 13, 0, 0, Math.PI * 2);
+			ctx.fill();
+			ctx.strokeStyle = "rgba(120, 20, 20, 0.5)";
+			ctx.lineWidth = 1;
+			for (var r = -8; r <= 8; r += 4) {
 				ctx.beginPath();
-				ctx.moveTo(0, 0);
-				ctx.lineTo(0, 10);
+				ctx.moveTo(-12 + Math.abs(r) * 0.3, 25 + r);
+				ctx.lineTo(12 - Math.abs(r) * 0.3, 25 + r);
 				ctx.stroke();
-				ctx.fillStyle = "#2a1a22";
-				ctx.fillRect(-6, 9, 12, 4);
-				ctx.fillRect(-6, 37, 12, 4);
-				ctx.fillStyle = "#e2483c";
-				ctx.beginPath();
-				ctx.ellipse(0, 25, 13, 13, 0, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.strokeStyle = "rgba(120, 20, 20, 0.5)";
-				ctx.lineWidth = 1;
-				for (var r = -8; r <= 8; r += 4) {
-					ctx.beginPath();
-					ctx.moveTo(-12 + Math.abs(r) * 0.3, 25 + r);
-					ctx.lineTo(12 - Math.abs(r) * 0.3, 25 + r);
-					ctx.stroke();
-				}
-				ctx.restore();
 			}
+			ctx.restore();
+		}
+
+		// Strings of lanterns overhead, scrolling a little slower than the path
+		function drawLanterns(){
+			var spacing = 340, sag = 46;
+			eachProp(0.9, spacing, spacing, 17, function(x, r1){
+				var x0 = x - r1 * spacing * 0.5;   // strings join end to end, so ignore the slot jitter
+				ctx.strokeStyle = "rgba(40, 20, 30, 0.8)";
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				ctx.moveTo(x0, 14);
+				ctx.quadraticCurveTo(x0 + spacing / 2, 14 + sag * 2, x0 + spacing, 14);
+				ctx.stroke();
+				drawLantern(x0 + spacing / 2, 14 + sag, Math.round(x0 / spacing));
+			});
+		}
+
+		// Cherry trees and grass on the front canvas, in front of the ninja, scrolling fastest of all
+		function drawFront(shakeX, shakeY){
+			fctx.clearRect(0, 0, W, H);
+			fctx.save();
+			fctx.translate(shakeX, shakeY);
+			// Cherry trees rising from the bottom of the screen: the ninja walks behind them
+			eachProp(1.3, W * 0.9, W * 0.45, 19, function(x, r1, r2){
+				if (r2 < 0.5) drawTree(fctx, trees[Math.floor(r1 * trees.length)], x, H + 30, H * 0.8 / 450);
+			});
+			// Tall bamboo in front now and then (never on the first screen, which stays as it is)
+			eachProp(1.3, W * 0.55, 200, 23, function(x, r1, r2){
+				if (r2 < 0.35 && x + cameraX * 1.3 > W * 1.1) drawBamboo(fctx, x, H + 10, H / 420, r1);
+			});
+			var g = Math.max(0.6, scale);
+			eachProp(1.4, 60, 60, 13, function(x, r1, r2){
+				if (r2 > 0.6) return;
+				var h = (20 + r1 * 36) * g;
+				fctx.fillStyle = r2 < 0.25 ? "#6b8f4e" : "#577a3e";
+				for (var b = -2; b <= 2; b++) {
+					fctx.beginPath();
+					fctx.moveTo(x + (b * 4 - 3) * g, H + 4);
+					fctx.quadraticCurveTo(x + b * 6 * g, H - h * 0.5, x + b * 10 * g, H - h * (1 - Math.abs(b) * 0.2));
+					fctx.lineTo(x + (b * 4 + 3) * g, H + 4);
+					fctx.closePath();
+					fctx.fill();
+				}
+			});
+			fctx.restore();
 		}
 
 		function frame(now){
-			var dt = Math.min(0.05, (now - last) / 1000);
+			var dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
 			last = now;
 			time += dt;
-
-			var target = (ninja.offsetLeft + 23) / W - 0.5;
-			parallax += (target - parallax) * Math.min(1, dt * 4);
-			var px = -parallax;
+			var camDelta = cameraX - lastCameraX;
+			lastCameraX = cameraX;
+			var s = H / 900;
 
 			ctx.save();
+			var shakeX = 0, shakeY = 0;
 			if (shake > 0.2) {
-				ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+				shakeX = (Math.random() - 0.5) * shake;
+				shakeY = (Math.random() - 0.5) * shake;
+				ctx.translate(shakeX, shakeY);
 				shake *= Math.pow(0.02, dt);
 			}
 
-			// Sky
+			// Sky, stars and sun don't scroll: they're too far away
 			var sky = ctx.createLinearGradient(0, 0, 0, horizon);
 			sky.addColorStop(0, "#2b1b4a");
 			sky.addColorStop(0.45, "#a8457a");
@@ -362,8 +560,7 @@ html, body {
 			}
 			ctx.globalAlpha = 1;
 
-			// Sun
-			var sunX = W * 0.28 + px * 12, sunY = horizon - H * 0.2, R = Math.min(W, H) * 0.11;
+			var sunX = W * 0.28, sunY = horizon - H * 0.2, R = Math.min(W, H) * 0.11;
 			var glow = ctx.createRadialGradient(sunX, sunY, R * 0.8, sunX, sunY, R * 2.8);
 			glow.addColorStop(0, "rgba(255, 235, 170, 0.6)");
 			glow.addColorStop(1, "rgba(255, 235, 170, 0)");
@@ -378,19 +575,24 @@ html, body {
 			for (var c = 0; c < clouds.length; c++) {
 				var cl = clouds[c];
 				cl.x += cl.v * dt;
-				if (cl.x - cl.w > W) cl.x = -cl.w;
+				var span = W + cl.w * 2;
+				var cloudX = ((cl.x - cameraX * 0.03) % span + span) % span - cl.w;
 				ctx.beginPath();
-				ctx.ellipse(cl.x + px * 18, cl.y, cl.w / 2, cl.h / 2, 0, 0, Math.PI * 2);
+				ctx.ellipse(cloudX, cl.y, cl.w / 2, cl.h / 2, 0, 0, Math.PI * 2);
 				ctx.fill();
 			}
 
-			// Mountains and pagoda
-			drawRidge(farRidge, "#c9788f", px * 20);
-			drawFuji(px * 24);
-			drawPagoda(W * 0.84 + px * 40, horizon - H * 0.035, H / 1000, "#6e3f6b");
-			drawRidge(midRidge, "#6e3f6b", px * 40);
+			// Mountains and pagodas: slow
+			drawHills(0.05, horizon - H * 0.05, H * 0.12, 1, "#c9788f");
+			eachProp(0.07, W * 1.8, W * 0.4, 3, function(x, r1){
+				if (r1 < 0.8) drawFuji(x);
+			});
+			eachProp(0.15, 300 + 700 * s, 120, 5, function(x, r1, r2){
+				if (r2 < 0.5) drawPagoda(x, horizon - H * 0.035, H / 1000, "#6e3f6b");
+			});
+			drawHills(0.15, horizon + H * 0.005, H * 0.05, 4, "#6e3f6b");
 
-			// Courtyard ground and stone path
+			// Courtyard ground
 			var ground = ctx.createLinearGradient(0, horizon, 0, H);
 			ground.addColorStop(0, "#f0c890");
 			ground.addColorStop(1, "#c98f5e");
@@ -399,30 +601,73 @@ html, body {
 			ctx.fillStyle = "rgba(110, 50, 80, 0.18)";
 			ctx.fillRect(-20, horizon, W + 40, 4);
 
-			var gx = px * 70, cx = W * 0.5;
-			ctx.fillStyle = "rgba(255, 245, 230, 0.3)";
-			ctx.beginPath();
-			ctx.moveTo(cx - W * 0.04 + gx * 0.4, horizon);
-			ctx.lineTo(cx + W * 0.04 + gx * 0.4, horizon);
-			ctx.lineTo(cx + W * 0.34 + gx, H);
-			ctx.lineTo(cx - W * 0.34 + gx, H);
-			ctx.closePath();
-			ctx.fill();
-			ctx.strokeStyle = "rgba(150, 90, 60, 0.25)";
-			ctx.lineWidth = 1;
-			for (var k = 1; k <= 9; k++) {
-				var f = Math.pow(k / 9, 1.8);
-				var ly = horizon + (H - horizon) * f;
-				var half = W * 0.04 + (W * 0.3) * f;
-				var shift = gx * (0.4 + 0.6 * f);
-				ctx.beginPath();
-				ctx.moveTo(cx - half + shift, ly);
-				ctx.lineTo(cx + half + shift, ly);
-				ctx.stroke();
+			// Near background: torii gates
+			var backBase = horizon + H * 0.03;
+			eachProp(0.45, 200 + 500 * s, 200 * s, 7, function(x, r1, r2){
+				if (r2 < 0.6) drawTorii(x, backBase, H * 0.17);
+			});
+
+			// Right behind the path: stone lanterns, bamboo, bushes and fences
+			eachProp(0.75, 60 + 230 * s, 150 * s, 11, function(x, r1, r2){
+				if (r2 < 0.3) drawStoneLantern(x, groundY, s);
+				else if (r2 < 0.55) drawBamboo(ctx, x, groundY, s, r1);
+				else if (r2 < 0.8) drawBush(x, groundY, s);
+				else drawFence(x, groundY, s);
+			});
+
+			drawPath();
+
+			// The kickable gate stands on the path (the ninja walks through it)
+			var gt = gate();
+			if (gt.x > -gt.h && gt.x < W + gt.h) {
+				ctx.save();
+				ctx.translate(gt.x, gt.base);
+				ctx.rotate(Math.sin(time * 38) * gateShake * 0.03);
+				drawTorii(0, 0, gt.h);
+				ctx.restore();
+			}
+			gateShake = Math.max(0, gateShake - dt * 2);
+
+			// Ninja stars from the gate: fly out, bounce, then glint on the path until picked up
+			var pathY = groundY + 6;
+			var ninjaWorldX = ninja.offsetLeft + 23 + cameraX;
+			var ninjaOnGround = ninja.offsetTop >= Math.round(groundY - 42) - 2;
+			for (var q = shuriken.length - 1; q >= 0; q--) {
+				var sh = shuriken[q];
+				if (!sh.landed) {
+					sh.vy += 900 * dt;
+					sh.x += sh.vx * dt;
+					sh.y += sh.vy * dt;
+					sh.rot += 14 * dt;
+					if (sh.y >= pathY && sh.vy > 0) {
+						sh.y = pathY;
+						if (sh.bounced) sh.landed = true;
+						else { sh.bounced = true; sh.vy *= -0.35; sh.vx *= 0.5; }
+					}
+				} else if (ninjaOnGround && Math.abs(sh.x - ninjaWorldX) < 26) {
+					shuriken.splice(q, 1);
+					for (var z = 0; z < 8; z++) {
+						var za = Math.random() * Math.PI * 2;
+						sparks.push({ x: sh.x - cameraX, y: pathY, vx: Math.cos(za) * 90, vy: Math.sin(za) * 90 - 60, life: 0.5, max: 0.5, size: 2, color: "#fff2a8", gravity: 150, stretch: 1 });
+					}
+					if (collectHandler) collectHandler();
+					continue;
+				}
+				ctx.globalAlpha = sh.landed ? 0.75 + 0.25 * Math.sin(time * 6 + q) : 1;
+				drawShuriken(ctx, sh.x - cameraX, sh.y, 8, sh.rot);
+				ctx.globalAlpha = 1;
 			}
 
-			drawTorii(W * 0.12 + px * 70, horizon + (H - horizon) * 0.4, H * 0.3);
-			drawTree(px * 110);
+			// Thrown stars
+			for (var u = thrown.length - 1; u >= 0; u--) {
+				var th = thrown[u];
+				th.x += th.vx * dt;
+				th.rot += 25 * dt;
+				th.life -= dt;
+				var thX = th.x - cameraX;
+				if (th.life <= 0 || thX < -60 || thX > W + 60) { thrown.splice(u, 1); continue; }
+				drawShuriken(ctx, thX, th.y, 9, th.rot);
+			}
 
 			// Ground shadow under the ninja while it's in the air (shrinks as it rises)
 			if (shadowY !== null) {
@@ -434,13 +679,13 @@ html, body {
 				ctx.fill();
 			}
 
-			// Falling petals
+			// Falling petals drift with the world as it scrolls
 			for (var p = 0; p < petals.length; p++) {
 				var pt = petals[p];
-				pt.x += (pt.vx + Math.sin(time * 1.3 + pt.sway) * 25) * dt;
+				pt.x += (pt.vx + Math.sin(time * 1.3 + pt.sway) * 25) * dt - camDelta * 0.9;
 				pt.y += pt.vy * dt;
 				pt.rot += pt.vr * dt;
-				if (pt.y > H + 20 || pt.x < -20) petals[p] = pt = newPetal(Math.random, false);
+				if (pt.y > H + 20 || pt.x < -40 || pt.x > W + 40) petals[p] = pt = newPetal(Math.random, false);
 				ctx.save();
 				ctx.translate(pt.x, pt.y);
 				ctx.rotate(pt.rot);
@@ -454,12 +699,12 @@ html, body {
 			drawLanterns();
 
 			// Punch sparks and stealth smoke
-			for (var s = sparks.length - 1; s >= 0; s--) {
-				var sp = sparks[s];
+			for (var k = sparks.length - 1; k >= 0; k--) {
+				var sp = sparks[k];
 				sp.life -= dt;
-				if (sp.life <= 0) { sparks.splice(s, 1); continue; }
+				if (sp.life <= 0) { sparks.splice(k, 1); continue; }
 				sp.vy += sp.gravity * dt;
-				sp.x += sp.vx * dt;
+				sp.x += sp.vx * dt - camDelta;
 				sp.y += sp.vy * dt;
 				ctx.globalAlpha = sp.life / sp.max;
 				ctx.fillStyle = sp.color;
@@ -481,10 +726,11 @@ html, body {
 				flash = Math.max(0, flash - dt * 2.5);
 			}
 
+			drawFront(shakeX, shakeY);
+
 			requestAnimationFrame(frame);
 		}
 
-		var shadowY = null;
 		window.addEventListener("resize", resize);
 		resize();
 		requestAnimationFrame(frame);
@@ -513,6 +759,34 @@ html, body {
 			// Ground-level y for the ninja's shadow while airborne, or null when landed
 			setShadow: function(y){
 				shadowY = y;
+			},
+			// A kick landed at screen (x, y): if it hit the gate, shake it and knock out ninja stars
+			kick: function(x, y){
+				var g = gate();
+				if (Math.abs(x - g.x) > g.h * 0.7 || y < g.base - g.h || time - lastGateKick < 0.6) return;
+				lastGateKick = time;
+				gateShake = 1;
+				for (var i = 0; i < 3; i++) {
+					shuriken.push({ x: g.x + cameraX + (i - 1) * g.h * 0.2, y: g.base - g.h * 0.9, vx: (i - 1) * 140 + (Math.random() - 0.5) * 120, vy: -420 - Math.random() * 160, rot: Math.random() * 6, bounced: false, landed: false });
+				}
+				while (shuriken.length > 15) shuriken.shift();
+			},
+			// fn is called whenever the ninja picks up a star
+			onCollect: function(fn){
+				collectHandler = fn;
+			},
+			throwStar: function(x, y, dir){
+				thrown.push({ x: x + cameraX, y: y, vx: dir * 750, rot: 0, life: 1.6 });
+			},
+			// Keeps the ninja (world x of its center) in the middle of the screen, except on the first
+			// screen, where the camera stays put until the ninja reaches the middle. Returns the camera x.
+			follow: function(centerX){
+				cameraX = Math.max(0, centerX - W / 2);
+				return cameraX;
+			},
+			// Top of the ninja image when its feet are on the path
+			groundTop: function(){
+				return Math.round(groundY - 42);
 			}
 		};
 	})();
@@ -743,22 +1017,26 @@ html, body {
 			}
 		}
 
-		// NES-style "boing" for jumps
-		function jump(){
+		// Quick NES-style pitch sweep: jump "boing", star pickup chime, throw whoosh
+		function blip(from, to, duration){
 			if (!ctx) return;
 			if (ctx.state === "suspended") ctx.resume();
 			var t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
 			o.type = "square";
-			o.frequency.setValueAtTime(220, t);
-			o.frequency.exponentialRampToValueAtTime(880, t + 0.16);
+			o.frequency.setValueAtTime(from, t);
+			o.frequency.exponentialRampToValueAtTime(to, t + duration * 0.8);
 			g.gain.setValueAtTime(0.08, t);
-			g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + duration);
 			o.connect(g); g.connect(ctx.destination);
 			o.start(t);
-			o.stop(t + 0.22);
+			o.stop(t + duration + 0.02);
 		}
 
-		return { load: load, play: play, jump: jump };
+		function jump(){
+			blip(220, 880, 0.2);
+		}
+
+		return { load: load, play: play, jump: jump, blip: blip };
 	})();
 
 	document.addEventListener("keydown", function(){ music.start(); });
@@ -771,23 +1049,23 @@ html, body {
 
 <script>
 
-	var stepCounter = 0;
-	var stepDelta = 1;
 	var root = 'Resources/Audio/';
 	sfx.load('punch', root + 'punch.Wav');
 	sfx.load('stepLeft', root + 'StepLeft.Wav');
 	sfx.load('stepRight', root + 'StepRight.Wav');
 	var audioPunch = { play: function(){ sfx.play('punch', 0.5, 0.3); } };
-	var audioStepLeft = { play: function(){ sfx.play('stepLeft', 0.3, 0.6); } };
-	var audioStepRight = { play: function(){ sfx.play('stepRight', 0.3, 0.6); } };
+	// Footsteps (a crinkling chip bag) only play while running
+	var audioStepLeft = { play: function(){ sfx.play('stepLeft', 0.2, 0.8); } };
+	var audioStepRight = { play: function(){ sfx.play('stepRight', 0.2, 0.8); } };
 
 	var ninjaImg = document.getElementById("ninja");
 	var powImg = document.getElementById("pow");
 	ninjaImg.style.position = "absolute";
 	powImg.style.position = "relative";
-	// Start the ninja standing in the courtyard
-	ninjaImg.style.left = Math.round(window.innerWidth * 0.3) + 'px';
-	ninjaImg.style.top = Math.round(window.innerHeight * 0.74) + 'px';
+	// The ninja's position along the scrolling world; its screen position comes from the camera
+	var worldX = Math.round(window.innerWidth * 0.3);
+	ninjaImg.style.top = scene.groundTop() + 'px';
+	placeNinja();
 	var requiredRestInterval = new Date().getTime();
 
 	document.addEventListener("keypress",function(e){
@@ -839,18 +1117,27 @@ html, body {
 
 
 	function attack() {
+		// Counts as a move, so the ninja can't jump or kick mid-punch
+		if (!startMove()) return;
 		setTimeout(punch,100);
-		setTimeout(standNeutral,600);
+		setTimeout(finishMove,600);
 	}
 
-	// ---- Special moves: jump, side kick, roundhouse kick and flying kick ----
+	// ---- Special moves: jumps, kicks and mid-air attacks ----
 	// The poses live in Resources/Images/Ninja_Moves.png: 64x50 cells, all facing right.
 	// While a move plays, the regular ninja image is hidden and #moves shows the pose.
 	var movesImg = document.getElementById("moves");
-	var POSES = { crouch: 0, tuck: 1, sideChamber: 2, sideKick: 3, roundChamber: 4, roundKick: 5, flyingKick: 6 };
+	var POSES = { crouch: 0, tuck: 1, sideChamber: 2, sideKick: 3, roundChamber: 4, roundKick: 5, flyingKick: 6, airRoundKick: 7, airPunch: 8 };
 	var POSE_W = 64, NINJA_W = 46;
-	var moveBusy = false, airborne = false, airKicked = false;
-	var MOVE_KEYS = { " ": jump, "k": sideKick, "r": roundhouse, "f": flyingKick };
+	var moveBusy = false, airborne = false, airAttacked = false;
+	var MOVE_KEYS = { " ": jump, "k": sideKick, "r": roundhouse, "f": flyingKick, "t": throwStar };
+
+	// One attack per jump; x, y is where the hit lands on the pose (facing right)
+	var AIR_ATTACKS = {
+		kick: { pose: "flyingKick", x: 44, y: 40, kick: true },
+		roundhouse: { pose: "airRoundKick", x: 39, y: 10, kick: true },
+		punch: { pose: "airPunch", x: 40, y: 21 }
+	};
 
 	function facingLeft(){
 		return window.getComputedStyle(ninjaImg).transform.charAt(7) == "-";
@@ -871,6 +1158,7 @@ html, body {
 		movesImg.style.transform = left ? "scaleX(-1)" : "none";
 	}
 
+	// Moves (including punches) don't overlap: a new one can't start until this one finishes
 	function startMove(){
 		if (moveBusy) return false;
 		moveBusy = true;
@@ -890,7 +1178,7 @@ html, body {
 	}
 
 	// Land a hit at a spot on the current pose (x, y in pose-cell pixels, facing right)
-	function strike(x, y){
+	function strike(x, y, isKick){
 		placePose();
 		var box = movesImg.getBoundingClientRect();
 		var hitX = facingLeft() ? box.right - x : box.left + x;
@@ -901,6 +1189,7 @@ html, body {
 		powImg.style.left = ((parseFloat(powImg.style.left) || 0) + hitX - powBox.width / 2 - powBox.left) + 'px';
 		powImg.style.top = ((parseFloat(powImg.style.top) || 0) + hitY - powBox.height / 2 - powBox.top) + 'px';
 		scene.hit(hitX, hitY);
+		if (isKick) scene.kick(hitX, hitY);
 		audioPunch.play();
 	}
 
@@ -922,18 +1211,22 @@ html, body {
 	function leap(duration, height, forward, kickAt, onLand){
 		var groundTop = ninjaImg.offsetTop;
 		var dir = facingLeft() ? -1 : 1;
-		var start = performance.now(), travelled = 0;
+		var start = performance.now(), travelled = 0, kicked = false;
 		airborne = true;
-		airKicked = false;
+		// A flying kick reserves the jump's one attack so another key can't use it up
+		airAttacked = kickAt !== null;
 		scene.setShadow(groundTop + 48);
 		(function tick(now){
 			// Frame timestamps can be a few ms older than `start`, so keep t from going negative
 			var t = Math.max(0, Math.min(1, (now - start) / duration));
 			ninjaImg.style.top = Math.round(groundTop - height * 4 * t * (1 - t)) + "px";
 			var travel = Math.round(dir * forward * t);
-			ninjaImg.style.left = (ninjaImg.offsetLeft + travel - travelled) + "px";
+			moveNinjaBy(travel - travelled);
 			travelled = travel;
-			if (kickAt !== null && t >= kickAt) airKick();
+			if (kickAt !== null && !kicked && t >= kickAt) {
+				kicked = true;
+				performAirAttack("kick");
+			}
 			if (t < 1) {
 				requestAnimationFrame(tick);
 			} else {
@@ -945,11 +1238,16 @@ html, body {
 		})(start);
 	}
 
-	function airKick(){
-		if (airKicked) return;
-		airKicked = true;
-		showPose("flyingKick");
-		strike(44, 40);
+	function airAttack(kind){
+		if (airAttacked) return;
+		airAttacked = true;
+		performAirAttack(kind);
+	}
+
+	function performAirAttack(kind){
+		var attack = AIR_ATTACKS[kind];
+		showPose(attack.pose);
+		strike(attack.x, attack.y, attack.kick);
 	}
 
 	function land(){
@@ -958,47 +1256,84 @@ html, body {
 		setTimeout(finishMove, 100);
 	}
 
+	// Turns to face Left or Right if one is held; returns -1, 0 or 1
+	function faceHeldDirection(){
+		var dx = (heldArrows[39] ? 1 : 0) - (heldArrows[37] ? 1 : 0);
+		if (dx) ninjaImg.style.transform = dx < 0 ? "scaleX(-1)" : "scaleX(1)";
+		return dx;
+	}
+
+	// Straight up, or sideways when Left/Right is held (further when running)
 	function jump(){
 		if (!startMove()) return;
 		showPose("crouch");
 		setTimeout(function(){
+			var dx = faceHeldDirection();
 			showPose("tuck");
 			sfx.jump();
-			leap(560, 80, 0, null, land);
+			leap(dx ? 650 : 560, 80, dx ? (running ? 170 : 110) : 0, null, land);
 		}, 70);
 	}
 
 	function flyingKick(){
-		if (airborne) { airKick(); return; }
+		if (airborne) { airAttack("kick"); return; }
 		if (!startMove()) return;
 		showPose("crouch");
 		setTimeout(function(){
+			faceHeldDirection();
 			showPose("tuck");
 			sfx.jump();
-			leap(700, 70, 110, 0.2, land);
+			leap(700, 70, running ? 170 : 110, 0.2, land);
 		}, 80);
 	}
 
 	function sideKick(){
-		if (airborne) { airKick(); return; }
+		if (airborne) { airAttack("kick"); return; }
 		if (!startMove()) return;
 		sequence([
 			[0, function(){ showPose("sideChamber"); }],
-			[90, function(){ showPose("sideKick"); strike(42, 29); }],
+			[90, function(){ showPose("sideKick"); strike(42, 29, true); }],
 			[280, function(){ hidePow(); showPose("sideChamber"); }],
 			[90, finishMove]
 		]);
 	}
 
 	function roundhouse(){
-		if (airborne) { airKick(); return; }
+		if (airborne) { airAttack("roundhouse"); return; }
 		if (!startMove()) return;
 		sequence([
 			[0, function(){ showPose("roundChamber"); }],
-			[110, function(){ showPose("roundKick"); strike(39, 12); }],
+			[110, function(){ showPose("roundKick"); strike(39, 12, true); }],
 			[300, function(){ hidePow(); showPose("roundChamber"); }],
 			[100, finishMove]
 		]);
+	}
+
+	// ---- Ninja stars: kick the gate to knock some loose, walk over them to pick up, T throws ----
+	var starCount = 0;
+	var starCountEl = document.getElementById("starCount");
+
+	function updateStarCount(){
+		starCountEl.hidden = starCount === 0;
+		starCountEl.textContent = "\u2726 \u00d7 " + starCount;
+	}
+
+	scene.onCollect(function(){
+		starCount++;
+		updateStarCount();
+		sfx.blip(880, 1760, 0.12);
+	});
+
+	function throwStar(){
+		if (airborne || starCount === 0 || !startMove()) return;
+		starCount--;
+		updateStarCount();
+		ninjaImg.style.backgroundPosition = '-40px 0px';   // the punch frame doubles as a throw
+		var dir = facingLeft() ? -1 : 1;
+		var box = ninjaImg.getBoundingClientRect();
+		scene.throwStar(dir > 0 ? box.right : box.left, box.top + 21, dir);
+		sfx.blip(1400, 300, 0.15);
+		setTimeout(finishMove, 250);
 	}
 
 	// ---- Stealth mode: hold S to fade out; let go and the ninja slowly fades back in ----
@@ -1033,19 +1368,84 @@ html, body {
 		if (!e.ctrlKey && !e.metaKey && !e.altKey) e.preventDefault();
 	}
 
-	// Left/right still steer while in the air (up/down don't)
-	function steerInAir(keyCode){
-		if (keyCode == 37) {
-			ninjaImg.style.left = (ninjaImg.offsetLeft - 2) + 'px';
-			ninjaImg.style.transform = "scaleX(-1)";
-		} else if (keyCode == 39) {
-			ninjaImg.style.left = (ninjaImg.offsetLeft + 2) + 'px';
-			ninjaImg.style.transform = "scaleX(1)";
-		}
+	// ---- Walking and running ----
+	// Hold the arrow keys to walk quietly; hold Shift too to run, with loud chip-bag footsteps.
+	var WALK_SPEED = 60, RUN_SPEED = 180;   // pixels per second
+	var WALK_STRIDE = 6, RUN_STRIDE = 18;   // pixels travelled per footstep
+	var heldArrows = {}, running = false;
+	var strideDistance = 0, rightFootNext = true, carryX = 0, lastWalkTick = performance.now();
+
+	// Moves the ninja along the world, which starts at x = 0 (the left edge of the first screen)
+	function moveNinjaBy(dx){
+		worldX = Math.max(0, worldX + dx);
+		placeNinja();
 	}
+
+	function placeNinja(){
+		var cameraX = scene.follow(worldX + 23);
+		ninjaImg.style.left = Math.round(worldX - cameraX) + 'px';
+	}
+
+	window.addEventListener("resize", function(){
+		if (!airborne) ninjaImg.style.top = scene.groundTop() + 'px';
+		placeNinja();
+	});
+
+	document.addEventListener("keyup", function(e){
+		running = e.shiftKey;
+		delete heldArrows[e.keyCode];
+	});
+	window.addEventListener("blur", function(){
+		heldArrows = {};
+		running = false;
+	});
+
+	function footstep(){
+		if (rightFootNext) {
+			stepRight();
+			if (running) audioStepRight.play();
+		} else {
+			stepLeft();
+			if (running) audioStepLeft.play();
+		}
+		rightFootNext = !rightFootNext;
+	}
+
+	(function walkTick(now){
+		var dt = Math.max(0, Math.min(0.05, (now - lastWalkTick) / 1000));
+		lastWalkTick = now;
+		// Side-scroller: only left and right. Nothing works while becoming stealthy,
+		// and jumps pick their direction at takeoff.
+		var dx = (heldArrows[39] ? 1 : 0) - (heldArrows[37] ? 1 : 0);
+		if (stealthHeld || airborne || !dx) {
+			strideDistance = RUN_STRIDE;   // so the next footstep lands right away
+			requestAnimationFrame(walkTick);
+			return;
+		}
+		var distance = (running ? RUN_SPEED : WALK_SPEED) * dt;
+		// Keep fractions of a pixel between frames so slow walking still moves on fast screens
+		carryX += dx * distance;
+		var moveX = Math.trunc(carryX);
+		carryX -= moveX;
+		if (moveX) moveNinjaBy(moveX);
+		ninjaImg.style.transform = dx < 0 ? "scaleX(-1)" : "scaleX(1)";
+		strideDistance += distance;
+		if (strideDistance >= (running ? RUN_STRIDE : WALK_STRIDE)) {
+			strideDistance = 0;
+			footstep();
+		}
+		requestAnimationFrame(walkTick);
+	})(lastWalkTick);
 
 	function move(e){
 		var key = (e.key || "").toLowerCase();
+		running = e.shiftKey;
+		// Arrow keys are handled by walkTick while they're held down
+		if (e.keyCode >= 37 && e.keyCode <= 40) {
+			blockKey(e);
+			heldArrows[e.keyCode] = true;
+			return;
+		}
 		if (key === "s") {
 			blockKey(e);
 			if (!e.repeat) beginStealth();
@@ -1061,59 +1461,14 @@ html, body {
 			if (!e.repeat) MOVE_KEYS[key]();
 			return;
 		}
+		// In the air, any other key throws a punch (one attack per jump)
 		if (airborne) {
 			blockKey(e);
-			steerInAir(e.keyCode);
+			if (!e.repeat && key.length === 1) airAttack("punch");
 			return;
 		}
 		// No punching in the middle of a kick
-		if (moveBusy && (e.keyCode < 37 || e.keyCode > 40)) blockKey(e);
-
-		if(e.keyCode >=37 && e.keyCode <=40)
-		{
-			if(stepCounter>=0 && stepCounter <3)
-			{
-				stepRight();
-				if(stepCounter == 0)
-					audioStepRight.play();
-			} else{
-				stepLeft();
-				if(stepCounter ==3)
-					audioStepLeft.play();
-			}
-
-			if(stepCounter == 5)
-			{
-				stepDelta = -1;
-			} else if (stepCounter == 0){
-				stepDelta = 1;
-			}
-
-			stepCounter = stepCounter + stepDelta;
-		}
-
-
-		var offset = 2;
-		if (e.keyCode == '38') {
-			var up = ninjaImg.offsetTop - offset;
-			ninjaImg.style.top = up.toString() +'px';
-		}
-		else if (e.keyCode == '40') {
-			var down = ninjaImg.offsetTop + offset;
-			ninjaImg.style.top = down.toString() +'px';
-		}
-		else if (e.keyCode == '37') {
-			var left = ninjaImg.offsetLeft - offset;
-
-			ninjaImg.style.left = left.toString() +'px';
-			ninjaImg.style.transform = "scaleX(-1)";
-		}
-		else if (e.keyCode == '39') {
-			var right = ninjaImg.offsetLeft + offset;
-			ninjaImg.style.left = right.toString() +'px';
-			ninjaImg.style.transform = "scaleX(1)";
-
-		}
+		if (moveBusy) blockKey(e);
 	}
 </script>
 </html>
