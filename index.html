@@ -111,6 +111,50 @@ html, body {
   cursor: pointer;
 }
 
+#villain {
+  position: absolute;
+  width: 80px;
+  height: 64px;
+  background: url(Resources/Images/Villain_Sprites.png) 0 0;
+  display: none;
+  pointer-events: none;
+}
+
+#bossBar {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px;
+  font: bold 13px/1.2 "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffd2c8;
+  background: rgba(40, 6, 14, 0.8);
+  border: 1px solid rgba(255, 120, 100, 0.6);
+  border-radius: 999px;
+}
+#bossBar[hidden] {
+  display: none;
+}
+#bossBar .meter {
+  width: 160px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#bossHealth {
+  width: 100%;
+  height: 100%;
+  background: #ff4a3a;
+  transition: width 0.2s;
+}
+
 #moves {
   position: absolute;
   width: 64px;
@@ -128,6 +172,7 @@ html, body {
 	<img id="ninja" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
 <div id="moves"></div>
+<div id="villain"></div>
 <div class="imgContainer">
 	<img id="pow" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
@@ -141,6 +186,7 @@ html, body {
 		<option value="trailer">&#127916; Trailer (3D video)</option>
 	</select>
 </label>
+<div id="bossBar" hidden><span>Oni Ronin</span><div class="meter"><div id="bossHealth"></div></div></div>
 <div id="hint">&larr; &rarr;: walk &middot; Shift: run &middot; Space: jump (hold an arrow to jump sideways) &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; attack mid-jump &middot; kick the gate for ninja stars, T: throw &middot; hold S: stealth &middot; other keys: punch &middot; walk left from a scene's start: village map</div>
 </body>
 
@@ -160,7 +206,7 @@ html, body {
 		var W, H, horizon, groundY, scale, s;
 		var cameraX = 0, lastCameraX = 0;
 		var stars = [], clouds = [], particles = [], sparks = [], trees = [];
-		var shuriken = [], thrown = [], collectHandler = null, gateShake = 0, lastGateKick = -1;
+		var shuriken = [], thrown = [], collectHandler = null, thrownHandler = null, gateShake = 0, lastGateKick = -1;
 		var flash = 0, shake = 0, time = 0, last = performance.now(), shadowY = null;
 		var theme, renderer = null;
 
@@ -907,6 +953,14 @@ html, body {
 				th.life -= dt;
 				var thX = th.x - cameraX;
 				if (th.life <= 0 || thX < -60 || thX > W + 60) { thrown.splice(u, 1); continue; }
+				if (thrownHandler && thrownHandler(thX, th.y)) {
+					thrown.splice(u, 1);
+					for (var zz = 0; zz < 10; zz++) {
+						var zza = Math.random() * Math.PI * 2;
+						sparks.push({ x: thX, y: th.y, vx: Math.cos(zza) * 160, vy: Math.sin(zza) * 160 - 40, life: 0.4, max: 0.4, size: 2.5, color: "#ffe9a8", gravity: 300, stretch: 1.6 });
+					}
+					continue;
+				}
 				drawShuriken(ctx, thX, th.y, 9, th.rot);
 			}
 
@@ -998,6 +1052,19 @@ html, body {
 			},
 			throwStar: function(x, y, dir){
 				thrown.push({ x: x + cameraX, y: y, vx: dir * 750, rot: 0, life: 1.6 });
+			},
+			// fn(screenX, screenY) is asked about each flying star; return true if it hit something
+			onThrownMove: function(fn){
+				thrownHandler = fn;
+			},
+			// Scatters n collectable ninja stars from a screen point
+			dropStars: function(x, y, n){
+				for (var i = 0; i < n; i++) {
+					shuriken.push({ x: x + cameraX, y: y, vx: (i - (n - 1) / 2) * 90 + (Math.random() - 0.5) * 60, vy: -380 - Math.random() * 160, rot: Math.random() * 6, bounced: false, landed: false });
+				}
+			},
+			camera: function(){
+				return cameraX;
 			},
 			// Keeps the ninja (world x of its center) in the middle of the screen, except on the first
 			// screen, where the camera stays put until the ninja reaches the middle. Returns the camera x.
@@ -1527,6 +1594,32 @@ html, body {
 					if (i === 4 || i === 12) noise(t, 0.08, 0.3, "bandpass", 2200);
 					if (i % 2 === 1) noise(t, 0.02, 0.08, "highpass", 8000);
 				}
+			},
+
+			// Boss battle: fast and menacing, D minor with a sharp seventh and a galloping bass
+			boss: {
+				bpm: 168,
+				melody: [
+					74,_,74,73, 74,_,_,70, 69,_,70,_, 73,_,74,_,
+					77,_,75,74, 73,_,70,_, 69,_,_,_, 70,69,67,65,
+					74,_,74,73, 74,_,_,70, 69,_,70,_, 73,_,77,_,
+					81,_,77,_, 75,_,74,_, 73,74,73,70, 69,_,_,_
+				],
+				bassRoots: [38, 34, 38, 33],
+				play: function(s, t){
+					var m = this.melody, len = m.length;
+					var bar = Math.floor(s / 16) % 4, i = s % 16, note = m[s % len];
+
+					if (note !== null) tone(waves.lead, mtof(note), t, noteLength(m, s % len, 3), 0.3, 7000);
+					var echoNote = m[(s - 2 + len) % len];
+					if (echoNote !== null && s >= 2) tone(waves.echo, mtof(echoNote - 12), t, this.step * 1.2, 0.08, 4000);
+					// Galloping bass on every sixteenth: root, root, octave, root
+					tone("triangle", mtof(this.bassRoots[bar] + [0, 0, 12, 0][i % 4]), t, this.step * 0.9, 0.75, 8000);
+					if (i === 0 || i === 6 || i === 8 || i === 14) kick(t);
+					if (i === 4 || i === 12) noise(t, 0.12, 0.6, "bandpass", 1900);
+					noise(t, 0.025, i % 2 ? 0.08 : 0.14, "highpass", 8000);
+					if (i === 0 && bar === 0) noise(t, 0.5, 0.3, "highpass", 5000);
+				}
 			}
 		};
 		for (var name in SONGS) SONGS[name].step = 60 / SONGS[name].bpm / 4;
@@ -1580,6 +1673,13 @@ html, body {
 				}
 				if (on) start();
 				return on;
+			},
+			// A short victory fanfare
+			jingle: function(){
+				if (!ctx) return;
+				var t = ctx.currentTime + 0.05;
+				[67, 71, 74, 79].forEach(function(note, i){ tone(waves.lead, mtof(note), t + i * 0.1, 0.12, 0.35, 6000); });
+				tone(waves.lead, mtof(83), t + 0.4, 0.6, 0.35, 6000);
 			},
 			// Briefly turn the music down so the sound effects come through clearly
 			duck: function(seconds, level){
@@ -1727,6 +1827,7 @@ html, body {
 		  powImg.style.left = (ninjaImg.offsetLeft + offset).toString() + 'px';
 		var powBox = powImg.getBoundingClientRect();
 		scene.hit(powBox.left + powBox.width / 2, powBox.top + powBox.height / 2);
+		villain.hitAt(powBox.left + powBox.width / 2, powBox.top + powBox.height / 2);
 
 		audioPunch.play();
 	}
@@ -1819,6 +1920,7 @@ html, body {
 		powImg.style.top = ((parseFloat(powImg.style.top) || 0) + hitY - powBox.height / 2 - powBox.top) + 'px';
 		scene.hit(hitX, hitY);
 		if (isKick && !mapMode) scene.kick(hitX, hitY);
+		villain.hitAt(hitX, hitY);
 		audioPunch.play();
 	}
 
@@ -2154,6 +2256,7 @@ html, body {
 	// ---- Scene menu (for trying scenes out while the game is in development) ----
 	var sceneSelect = document.getElementById("sceneSelect");
 	var currentScene = "dojo";
+	var sceneVersion = 0;   // goes up on every scene change
 
 	// Coming back from the trailer with the browser's Back button: show the scene that's actually on
 	window.addEventListener("pageshow", function(){
@@ -2164,6 +2267,7 @@ html, body {
 	// put the ninja next to the way back into it.
 	function chooseScene(name, fromScene){
 		currentScene = name;
+		sceneVersion++;
 		sceneSelect.value = name;
 		carryX = carryY = 0;
 		if (name === "map") {
@@ -2206,5 +2310,169 @@ html, body {
 			chooseScene(savedScene);
 		}
 	} catch (e) {}
+
+	// ---- The Oni Ronin: a villain lurking deep in the Moonlit Bamboo Forest ----
+	// Walk far enough into the forest and it appears (with boss music). It stalks the ninja and
+	// slashes when close, but it can't see a ninja in stealth. Five hits defeat it.
+	var villain = (function(){
+		var el = document.getElementById("villain");
+		var bar = document.getElementById("bossBar");
+		var healthEl = document.getElementById("bossHealth");
+		var CELL_W = 80, TORSO = 32.5, FEET = 61;          // sprite cell width, torso column, feet row
+		var MAX_HP = 5, SPEED = 55, REACH = 64, HIT_WIDTH = 42;
+		var FRAMES = { idle: 0, slash: 1, hurt: 2 };
+		var state = "waiting", stateTime = 0, x = 0, hp = MAX_HP, facing = -1, invulnerableUntil = 0, spin = 0, fade = 1;
+		var lastSceneVersion = -1, last = performance.now();
+
+		function setState(next){
+			state = next;
+			stateTime = 0;
+		}
+
+		function reset(){
+			setState("waiting");
+			hp = MAX_HP;
+			invulnerableUntil = 0;
+			el.style.display = "none";
+			bar.hidden = true;
+		}
+
+		function screenX(){ return x - scene.camera(); }
+		// Top of the villain image with its feet on the path
+		function top(){ return scene.groundTop() + 48 - FEET; }
+		function ninjaCenter(){ return worldX + 23; }
+		function ninjaHidden(){ return ninjaOpacity < 0.4; }
+		function active(){ return state !== "waiting" && state !== "appearing" && state !== "defeated" && state !== "gone"; }
+
+		function draw(frame){
+			var sx = screenX();
+			el.style.display = "block";
+			el.style.backgroundPosition = (-frame * CELL_W) + "px 0px";
+			el.style.left = Math.round(sx - (facing < 0 ? CELL_W - TORSO : TORSO)) + "px";
+			var bob = state === "stalk" && !ninjaHidden() ? -Math.abs(Math.sin(stateTime * 8)) * 2 : 0;
+			el.style.top = Math.round(top() + bob) + "px";
+			el.style.transform = (facing < 0 ? "scaleX(-1)" : "") + (spin ? " rotate(" + spin + "rad)" : "");
+			el.style.opacity = fade;
+		}
+
+		function hurtNinja(){
+			var dir = ninjaCenter() < x ? -1 : 1;
+			var box = ninjaImg.getBoundingClientRect();
+			scene.hit(box.left + box.width / 2, box.top + box.height / 2);
+			sfx.blip(320, 110, 0.25);
+			// Slide the ninja 60px back over a fifth of a second
+			var start = performance.now(), pushed = 0;
+			(function push(now){
+				if (mapMode) return;
+				var target = Math.round(60 * Math.min(1, (now - start) / 200));
+				moveNinjaBy(dir * (target - pushed));
+				pushed = target;
+				if (pushed < 60) requestAnimationFrame(push);
+			})(start);
+		}
+
+		function defeat(){
+			setState("defeated");
+			scene.puff(screenX(), top() + 30);
+			scene.dropStars(screenX(), top() + 30, 5);
+			music.jingle();
+			setTimeout(function(){
+				if (currentScene === "forest" && !mapMode && state === "gone") music.setSong("forest");
+			}, 1500);
+		}
+
+		// An attack landed at screen point (px, py); returns true if it struck the villain
+		function hitAt(px, py){
+			if (!active() || performance.now() < invulnerableUntil) return false;
+			var sx = screenX(), t = top();
+			if (Math.abs(px - sx) > HIT_WIDTH || py < t + 4 || py > t + FEET + 4) return false;
+			hp--;
+			invulnerableUntil = performance.now() + 300;
+			healthEl.style.width = (hp / MAX_HP * 100) + "%";
+			x += (px < sx ? 1 : -1) * 24;
+			if (hp <= 0) defeat();
+			else setState("hurt");
+			return true;
+		}
+
+		// Thrown stars can hit it too
+		scene.onThrownMove(function(sx, sy){
+			if (!hitAt(sx, sy)) return false;
+			sfx.blip(2400, 1600, 0.06);
+			return true;
+		});
+
+		(function tick(now){
+			var dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
+			last = now;
+			stateTime += dt;
+
+			// Leaving or re-entering a scene puts the villain back in hiding
+			if (sceneVersion !== lastSceneVersion) {
+				lastSceneVersion = sceneVersion;
+				reset();
+			}
+			if (mapMode || currentScene !== "forest") {
+				requestAnimationFrame(tick);
+				return;
+			}
+
+			var gap = ninjaCenter() - x, dist = Math.abs(gap), toward = gap < 0 ? -1 : 1;
+			if (state === "waiting") {
+				if (worldX > window.innerWidth * 1.2) {
+					x = ninjaCenter() + window.innerWidth * 0.4;
+					facing = -1;
+					fade = 0;
+					spin = 0;
+					healthEl.style.width = "100%";
+					bar.hidden = false;
+					setState("appearing");
+					scene.puff(screenX(), top() + 30);
+					music.setSong("boss");
+				}
+			} else if (state === "appearing") {
+				fade = Math.min(1, stateTime / 0.5);
+				if (stateTime > 0.8) setState("stalk");
+			} else if (state === "stalk") {
+				if (ninjaHidden()) {
+					// Can't see the ninja: stop and look around
+					facing = Math.floor(stateTime / 0.8) % 2 ? 1 : -1;
+				} else {
+					facing = toward;
+					if (dist > REACH) x += toward * SPEED * dt;
+					else setState("windup");
+				}
+			} else if (state === "windup") {
+				facing = toward;
+				if (stateTime > 0.45) {
+					setState("slash");
+					sfx.blip(900, 200, 0.18);
+					if (!ninjaHidden() && !airborne && dist < REACH + 20) hurtNinja();
+				}
+			} else if (state === "slash") {
+				if (stateTime > 0.35) setState("recover");
+			} else if (state === "recover") {
+				if (stateTime > 0.6) setState("stalk");
+			} else if (state === "hurt") {
+				if (stateTime > 0.35) setState("stalk");
+			} else if (state === "defeated") {
+				spin += dt * 9;
+				fade = Math.max(0, 1 - stateTime / 0.9);
+				x -= toward * 120 * dt;
+				if (stateTime > 1) {
+					setState("gone");
+					el.style.display = "none";
+					bar.hidden = true;
+				}
+			}
+
+			if (state !== "waiting" && state !== "gone") {
+				draw(state === "slash" ? FRAMES.slash : (state === "hurt" || state === "defeated") ? FRAMES.hurt : FRAMES.idle);
+			}
+			requestAnimationFrame(tick);
+		})(last);
+
+		return { hitAt: hitAt };
+	})();
 </script>
 </html>
