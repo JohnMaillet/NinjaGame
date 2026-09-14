@@ -71,11 +71,15 @@ html, body {
   z-index: 6;
 }
 
-#starCount {
+#inventory {
   position: fixed;
   top: 12px;
   left: 12px;
   z-index: 6;
+  display: flex;
+  gap: 8px;
+}
+#starCount, #knifeCount {
   padding: 6px 14px;
   font: 14px/1.2 "Segoe UI", system-ui, sans-serif;
   color: #ffe8c2;
@@ -83,7 +87,49 @@ html, body {
   border: 1px solid rgba(255, 220, 180, 0.5);
   border-radius: 999px;
 }
-#starCount[hidden] {
+#starCount[hidden], #knifeCount[hidden] {
+  display: none;
+}
+
+.thug {
+  position: absolute;
+  width: 64px;
+  height: 56px;
+  background: url(Resources/Images/Thug_Sprites.png) 0 0;
+  display: none;
+  pointer-events: none;
+  transform-origin: 50% 96%;
+}
+
+.speech {
+  position: absolute;
+  z-index: 6;
+  padding: 2px 7px;
+  font: bold 13px/1.2 "Segoe UI", system-ui, sans-serif;
+  color: #2b1b4a;
+  background: #fff8e8;
+  border: 2px solid #2b1b4a;
+  border-radius: 10px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.speech::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-top-color: #2b1b4a;
+  border-bottom: 0;
+}
+.speech.alert {
+  color: #fff;
+  background: #d8322a;
+  border-color: #5a0f0a;
+}
+.speech[hidden] {
   display: none;
 }
 
@@ -177,7 +223,7 @@ html, body {
 	<img id="pow" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
 <button id="musicBtn" type="button">&#9835; Music: On</button>
-<div id="starCount" hidden></div>
+<div id="inventory"><div id="starCount" hidden></div><div id="knifeCount" hidden></div></div>
 <label id="scenePicker">Scene:
 	<select id="sceneSelect">
 		<option value="map">Village Map (top-down)</option>
@@ -187,7 +233,7 @@ html, body {
 	</select>
 </label>
 <div id="bossBar" hidden><span>Oni Ronin</span><div class="meter"><div id="bossHealth"></div></div></div>
-<div id="hint">&larr; &rarr;: walk &middot; Shift: run &middot; Space: jump (hold an arrow to jump sideways) &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; attack mid-jump &middot; kick the gate for ninja stars, T: throw &middot; hold S: stealth &middot; other keys: punch &middot; walk left from a scene's start: village map</div>
+<div id="hint">&larr; &rarr;: walk &middot; Shift: run &middot; Space: jump (hold an arrow to jump sideways) &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; attack mid-jump &middot; kick the gate for ninja stars, T: throw &middot; beaten thugs may drop knives: E thrust, Q throw &middot; hold S: stealth &middot; other keys: punch &middot; walk left from a scene's start: village map</div>
 </body>
 
 <script>
@@ -511,6 +557,25 @@ html, body {
 			g.beginPath();
 			g.arc(0, 0, r * 0.18, 0, Math.PI * 2);
 			g.fill();
+			g.restore();
+		}
+
+		function drawKnife(g, x, y, rot){
+			g.save();
+			g.translate(x, y);
+			g.rotate(rot);
+			g.fillStyle = "#d8dde6";
+			g.beginPath();
+			g.moveTo(-2, -2.5);
+			g.lineTo(13, -1.5);
+			g.lineTo(18, 0.5);
+			g.lineTo(-2, 2.5);
+			g.closePath();
+			g.fill();
+			g.fillStyle = "#c9a23a";
+			g.fillRect(-4, -4.5, 2.5, 9);
+			g.fillStyle = "#5a3a22";
+			g.fillRect(-12, -2, 8, 4);
 			g.restore();
 		}
 
@@ -937,11 +1002,12 @@ html, body {
 						var za = Math.random() * Math.PI * 2;
 						sparks.push({ x: sh.x - cameraX, y: pathY, vx: Math.cos(za) * 90, vy: Math.sin(za) * 90 - 60, life: 0.5, max: 0.5, size: 2, color: "#fff2a8", gravity: 150, stretch: 1 });
 					}
-					if (collectHandler) collectHandler();
+					if (collectHandler) collectHandler(sh.kind || "star");
 					continue;
 				}
 				ctx.globalAlpha = sh.landed ? 0.75 + 0.25 * Math.sin(time * 6 + q) : 1;
-				drawShuriken(ctx, sh.x - cameraX, sh.y, 8, sh.rot);
+				if (sh.kind === "knife") drawKnife(ctx, sh.x - cameraX, sh.y - 2, sh.landed ? 0 : sh.rot);
+				else drawShuriken(ctx, sh.x - cameraX, sh.y, 8, sh.rot);
 				ctx.globalAlpha = 1;
 			}
 
@@ -953,7 +1019,7 @@ html, body {
 				th.life -= dt;
 				var thX = th.x - cameraX;
 				if (th.life <= 0 || thX < -60 || thX > W + 60) { thrown.splice(u, 1); continue; }
-				if (thrownHandler && thrownHandler(thX, th.y)) {
+				if (thrownHandler && thrownHandler(thX, th.y, th.kind)) {
 					thrown.splice(u, 1);
 					for (var zz = 0; zz < 10; zz++) {
 						var zza = Math.random() * Math.PI * 2;
@@ -961,7 +1027,8 @@ html, body {
 					}
 					continue;
 				}
-				drawShuriken(ctx, thX, th.y, 9, th.rot);
+				if (th.kind === "knife") drawKnife(ctx, thX, th.y, th.rot);
+				else drawShuriken(ctx, thX, th.y, 9, th.rot);
 			}
 
 			// Ground shadow under the ninja while it's in the air (shrinks as it rises)
@@ -1046,14 +1113,19 @@ html, body {
 				}
 				while (shuriken.length > 15) shuriken.shift();
 			},
-			// fn is called whenever the ninja picks up a star
+			// fn(kind) is called whenever the ninja picks up a star ("star") or a knife ("knife")
 			onCollect: function(fn){
 				collectHandler = fn;
 			},
-			throwStar: function(x, y, dir){
-				thrown.push({ x: x + cameraX, y: y, vx: dir * 750, rot: 0, life: 1.6 });
+			// kind: "star" (default) or "knife"
+			throwStar: function(x, y, dir, kind){
+				thrown.push({ x: x + cameraX, y: y, vx: dir * 750, rot: 0, life: 1.6, kind: kind || "star" });
 			},
-			// fn(screenX, screenY) is asked about each flying star; return true if it hit something
+			// Drops one collectable item ("star" or "knife") from a screen point
+			dropItem: function(x, y, kind){
+				shuriken.push({ x: x + cameraX, y: y, vx: (Math.random() - 0.5) * 120, vy: -320, rot: 0, bounced: false, landed: false, kind: kind });
+			},
+			// fn(screenX, screenY, kind) is asked about each flying star or knife; return true if it hit something
 			onThrownMove: function(fn){
 				thrownHandler = fn;
 			},
@@ -1827,7 +1899,7 @@ html, body {
 		  powImg.style.left = (ninjaImg.offsetLeft + offset).toString() + 'px';
 		var powBox = powImg.getBoundingClientRect();
 		scene.hit(powBox.left + powBox.width / 2, powBox.top + powBox.height / 2);
-		villain.hitAt(powBox.left + powBox.width / 2, powBox.top + powBox.height / 2);
+		hitEnemiesAt(powBox.left + powBox.width / 2, powBox.top + powBox.height / 2, 1);
 
 		audioPunch.play();
 	}
@@ -1857,10 +1929,10 @@ html, body {
 	// The poses live in Resources/Images/Ninja_Moves.png: 64x50 cells, all facing right.
 	// While a move plays, the regular ninja image is hidden and #moves shows the pose.
 	var movesImg = document.getElementById("moves");
-	var POSES = { crouch: 0, tuck: 1, sideChamber: 2, sideKick: 3, roundChamber: 4, roundKick: 5, flyingKick: 6, airRoundKick: 7, airPunch: 8 };
+	var POSES = { crouch: 0, tuck: 1, sideChamber: 2, sideKick: 3, roundChamber: 4, roundKick: 5, flyingKick: 6, airRoundKick: 7, airPunch: 8, knifeThrust: 9 };
 	var POSE_W = 64, NINJA_W = 46;
 	var moveBusy = false, airborne = false, airAttacked = false;
-	var MOVE_KEYS = { " ": jump, "k": sideKick, "r": roundhouse, "f": flyingKick, "t": throwStar };
+	var MOVE_KEYS = { " ": jump, "k": sideKick, "r": roundhouse, "f": flyingKick, "t": throwStar, "q": throwKnife, "e": knifeThrust };
 
 	// One attack per jump; x, y is where the hit lands on the pose (facing right)
 	var AIR_ATTACKS = {
@@ -1908,7 +1980,7 @@ html, body {
 	}
 
 	// Land a hit at a spot on the current pose (x, y in pose-cell pixels, facing right)
-	function strike(x, y, isKick){
+	function strike(x, y, isKick, damage){
 		placePose();
 		var box = movesImg.getBoundingClientRect();
 		var hitX = facingLeft() ? box.right - x : box.left + x;
@@ -1920,7 +1992,7 @@ html, body {
 		powImg.style.top = ((parseFloat(powImg.style.top) || 0) + hitY - powBox.height / 2 - powBox.top) + 'px';
 		scene.hit(hitX, hitY);
 		if (isKick && !mapMode) scene.kick(hitX, hitY);
-		villain.hitAt(hitX, hitY);
+		hitEnemiesAt(hitX, hitY, damage || 1);
 		audioPunch.play();
 	}
 
@@ -2040,44 +2112,62 @@ html, body {
 		]);
 	}
 
-	// ---- Ninja stars: kick the gate to knock some loose, walk over them to pick up, T throws ----
-	var starCount = 0;
-	var starCountEl = document.getElementById("starCount");
+	// ---- Weapons: ninja stars (kick the gate) and knives (dropped by beaten thugs) ----
+	// Walk over one to pick it up. T throws a star and Q throws a knife (either is gone once thrown);
+	// E thrusts with a knife, which hits twice as hard as a punch and keeps the knife.
+	var inventory = { star: 0, knife: 0 };
+	var inventoryEls = { star: document.getElementById("starCount"), knife: document.getElementById("knifeCount") };
+	var INVENTORY_ICONS = { star: "\u2726", knife: "\uD83D\uDDE1" };
 
-	function updateStarCount(){
-		starCountEl.hidden = starCount === 0;
-		starCountEl.textContent = "\u2726 \u00d7 " + starCount;
+	function updateInventory(){
+		for (var kind in inventory) {
+			inventoryEls[kind].hidden = inventory[kind] === 0;
+			inventoryEls[kind].textContent = INVENTORY_ICONS[kind] + " \u00d7 " + inventory[kind];
+		}
 	}
 
-	scene.onCollect(function(){
-		starCount++;
-		updateStarCount();
-		sfx.blip(880, 1760, 0.12);
+	scene.onCollect(function(kind){
+		inventory[kind]++;
+		updateInventory();
+		sfx.blip(kind === "knife" ? 660 : 880, kind === "knife" ? 1320 : 1760, 0.12);
 	});
 
-	function throwStar(){
-		if (starCount === 0) return;
+	function throwStar(){ throwWeapon("star"); }
+	function throwKnife(){ throwWeapon("knife"); }
+
+	// Mid-jump, a throw counts as the jump's one attack
+	function throwWeapon(kind){
+		if (inventory[kind] === 0) return;
 		if (airborne) {
-			// Mid-jump, a throw counts as the jump's one attack
 			if (airAttacked) return;
 			airAttacked = true;
 			showPose("airPunch");
 			var pose = movesImg.getBoundingClientRect();
-			launchStar(facingLeft() ? pose.right - 40 : pose.left + 40, pose.top + 21);
+			launchWeapon(kind, facingLeft() ? pose.right - 40 : pose.left + 40, pose.top + 21);
 			return;
 		}
 		if (!startMove()) return;
 		ninjaImg.style.backgroundPosition = '-40px 0px';   // the punch frame doubles as a throw
 		var box = ninjaImg.getBoundingClientRect();
-		launchStar(facingLeft() ? box.left : box.right, box.top + 21);
+		launchWeapon(kind, facingLeft() ? box.left : box.right, box.top + 21);
 		setTimeout(finishMove, 250);
 	}
 
-	function launchStar(x, y){
-		starCount--;
-		updateStarCount();
-		scene.throwStar(x, y, facingLeft() ? -1 : 1);
-		sfx.blip(1400, 300, 0.15);
+	function launchWeapon(kind, x, y){
+		inventory[kind]--;
+		updateInventory();
+		scene.throwStar(x, y, facingLeft() ? -1 : 1, kind);
+		sfx.blip(kind === "knife" ? 900 : 1400, 300, 0.15);
+	}
+
+	// A knife thrust: twice the damage of a punch, and the knife stays in hand
+	function knifeThrust(){
+		if (inventory.knife === 0 || airborne || !startMove()) return;
+		sequence([
+			[0, function(){ showPose("knifeThrust"); }],
+			[70, function(){ strike(60, 21, false, 2); }],
+			[230, finishMove]
+		]);
 	}
 
 	// ---- Stealth mode: hold S to fade out; let go and the ninja slowly fades back in ----
@@ -2239,7 +2329,7 @@ html, body {
 			// Stops the key from also counting as a punch (and Space from scrolling)
 			blockKey(e);
 			// No jumping, flying kicks or throwing on the village map
-			if (mapMode && (key === " " || key === "f" || key === "t")) return;
+			if (mapMode && (key === " " || key === "f" || key === "t" || key === "q")) return;
 			if (!e.repeat) MOVE_KEYS[key]();
 			return;
 		}
@@ -2355,22 +2445,6 @@ html, body {
 			el.style.opacity = fade;
 		}
 
-		function hurtNinja(){
-			var dir = ninjaCenter() < x ? -1 : 1;
-			var box = ninjaImg.getBoundingClientRect();
-			scene.hit(box.left + box.width / 2, box.top + box.height / 2);
-			sfx.blip(320, 110, 0.25);
-			// Slide the ninja 60px back over a fifth of a second
-			var start = performance.now(), pushed = 0;
-			(function push(now){
-				if (mapMode) return;
-				var target = Math.round(60 * Math.min(1, (now - start) / 200));
-				moveNinjaBy(dir * (target - pushed));
-				pushed = target;
-				if (pushed < 60) requestAnimationFrame(push);
-			})(start);
-		}
-
 		function defeat(){
 			setState("defeated");
 			scene.puff(screenX(), top() + 30);
@@ -2381,26 +2455,19 @@ html, body {
 			}, 1500);
 		}
 
-		// An attack landed at screen point (px, py); returns true if it struck the villain
-		function hitAt(px, py){
+		// An attack of the given damage landed at screen point (px, py); returns true if it struck the villain
+		function hitAt(px, py, damage){
 			if (!active() || performance.now() < invulnerableUntil) return false;
 			var sx = screenX(), t = top();
 			if (Math.abs(px - sx) > HIT_WIDTH || py < t + 4 || py > t + FEET + 4) return false;
-			hp--;
+			hp -= damage || 1;
 			invulnerableUntil = performance.now() + 300;
-			healthEl.style.width = (hp / MAX_HP * 100) + "%";
+			healthEl.style.width = (Math.max(0, hp) / MAX_HP * 100) + "%";
 			x += (px < sx ? 1 : -1) * 24;
 			if (hp <= 0) defeat();
 			else setState("hurt");
 			return true;
 		}
-
-		// Thrown stars can hit it too
-		scene.onThrownMove(function(sx, sy){
-			if (!hitAt(sx, sy)) return false;
-			sfx.blip(2400, 1600, 0.06);
-			return true;
-		});
 
 		(function tick(now){
 			var dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
@@ -2447,7 +2514,7 @@ html, body {
 				if (stateTime > 0.45) {
 					setState("slash");
 					sfx.blip(900, 200, 0.18);
-					if (!ninjaHidden() && !airborne && dist < REACH + 20) hurtNinja();
+					if (!ninjaHidden() && !airborne && dist < REACH + 20) knockBackNinja(x);
 				}
 			} else if (state === "slash") {
 				if (stateTime > 0.35) setState("recover");
@@ -2474,5 +2541,251 @@ html, body {
 
 		return { hitAt: hitAt };
 	})();
+
+	// Knocks the ninja back, away from an attacker at world x (no damage, just a shove and a flash)
+	function knockBackNinja(attackerX){
+		var dir = worldX + 23 < attackerX ? -1 : 1;
+		var box = ninjaImg.getBoundingClientRect();
+		scene.hit(box.left + box.width / 2, box.top + box.height / 2);
+		sfx.blip(320, 110, 0.25);
+		// Slide 60px back over a fifth of a second
+		var start = performance.now(), pushed = 0;
+		(function push(now){
+			if (mapMode) return;
+			var target = Math.round(60 * Math.min(1, (now - start) / 200));
+			moveNinjaBy(dir * (target - pushed));
+			pushed = target;
+			if (pushed < 60) requestAnimationFrame(push);
+		})(start);
+	}
+
+	// ---- Thugs: knife-carrying goons patrolling the path in the side-scrolling scenes ----
+	// They turn around with an "Eh?" when they hear the ninja running behind them, and shout "!" when
+	// they spot it, which sends every thug on screen rushing in. Stealth hides the ninja from their
+	// eyes but not their ears. One hit knocks a thug out; some drop a knife.
+	var THUG_SPOTS = {
+		// x: where each thug starts, in screen widths from the start of the world
+		dojo: [
+			{ x: 1.35, facing: -1, knife: true },
+			{ x: 1.9, facing: 1 },
+			{ x: 2.15, facing: -1, knife: true },
+			{ x: 3.0, facing: 1 },
+			{ x: 3.6, facing: -1, knife: true }
+		],
+		forest: [
+			{ x: 2.3, facing: -1, knife: true },
+			{ x: 2.9, facing: 1 },
+			{ x: 3.4, facing: -1, knife: true }
+		]
+	};
+	var THUG_W = 64, THUG_TORSO = 30, THUG_FEET = 54;      // sprite cell width, torso column, feet row
+	var THUG_FRAMES = { idle: 0, walk1: 1, walk2: 2, thrust: 3, hurt: 4 };
+	var THUG_WALK = 30, THUG_RUSH = 150, THUG_REACH = 44;
+	// How far a thug facing the ninja can see it: further in daylight, much less at night.
+	// Hearing (a running ninja) reaches the same distance in either.
+	var THUG_SIGHT = { dojo: 460, forest: 220 }, THUG_HEARING = 380;
+	var thugs = [], thugSceneVersion = -1, thugLast = performance.now();
+
+	function setupThugs(){
+		thugs.forEach(function(t){
+			t.el.remove();
+			t.bubble.remove();
+		});
+		thugs = [];
+		var spots = !mapMode && THUG_SPOTS[currentScene];
+		if (!spots) return;
+		spots.forEach(function(spot){
+			var el = document.createElement("div");
+			el.className = "thug";
+			var bubble = document.createElement("div");
+			bubble.className = "speech";
+			bubble.hidden = true;
+			document.body.appendChild(el);
+			document.body.appendChild(bubble);
+			var x = spot.x * window.innerWidth;
+			thugs.push({ el: el, bubble: bubble, x: x, home: x, facing: spot.facing, knife: !!spot.knife, state: "patrol", stateTime: 0, noiseDir: 1, bubbleUntil: 0, fall: 0, fade: 1 });
+		});
+	}
+
+	function setThugState(t, state){
+		t.state = state;
+		t.stateTime = 0;
+	}
+
+	function say(t, text, alert, seconds){
+		t.bubble.textContent = text;
+		t.bubble.className = alert ? "speech alert" : "speech";
+		t.bubble.hidden = false;
+		t.bubbleUntil = performance.now() + seconds * 1000;
+	}
+
+	function thugUp(t){ return t.state !== "down" && t.state !== "gone"; }
+
+	function thugTop(){ return scene.groundTop() + 48 - THUG_FEET; }
+
+	// Every thug on screen that isn't already fighting rushes at the ninja
+	function alertThugs(){
+		var cam = scene.camera();
+		thugs.forEach(function(t){
+			var sx = t.x - cam;
+			if (!thugUp(t) || sx < -80 || sx > window.innerWidth + 80) return;
+			if (t.state === "alert" || t.state === "rush" || t.state === "windup" || t.state === "thrust" || t.state === "recover") return;
+			setThugState(t, "alert");
+			t.stateTime = -Math.random() * 0.25;   // a slightly staggered reaction
+			say(t, "!", true, 0.9);
+		});
+	}
+
+	function knockOutThug(t, pushDir){
+		setThugState(t, "down");
+		t.x += pushDir * 20;
+		t.bubble.hidden = true;
+		var sx = t.x - scene.camera();
+		if (t.knife) scene.dropItem(sx, thugTop() + 30, "knife");
+		// The commotion makes nearby thugs turn around to look
+		thugs.forEach(function(other){
+			if (other === t || !thugUp(other) || Math.abs(other.x - t.x) > THUG_HEARING) return;
+			if (other.state === "patrol" || other.state === "idle" || other.state === "lost") {
+				other.noiseDir = t.x < other.x ? -1 : 1;
+				setThugState(other, "heard");
+				say(other, "Eh?", false, 1);
+			}
+		});
+	}
+
+	// An attack of the given damage landed at screen point (px, py): knocks out a thug there, or
+	// hurts the Oni Ronin. Returns true if it hit anyone.
+	function hitEnemiesAt(px, py, damage){
+		var cam = scene.camera(), top = thugTop();
+		for (var i = 0; i < thugs.length; i++) {
+			var t = thugs[i];
+			if (!thugUp(t)) continue;
+			var sx = t.x - cam;
+			if (Math.abs(px - sx) <= 34 && py >= top && py <= top + THUG_FEET + 4) {
+				knockOutThug(t, px < sx ? 1 : -1);
+				return true;
+			}
+		}
+		return villain.hitAt(px, py, damage);
+	}
+
+	// Thrown stars and knives hit enemies too (a knife counts double)
+	scene.onThrownMove(function(sx, sy, kind){
+		if (!hitEnemiesAt(sx, sy, kind === "knife" ? 2 : 1)) return false;
+		sfx.blip(2400, 1600, 0.06);
+		return true;
+	});
+
+	function drawThug(t, cam, now){
+		var sx = t.x - cam, top = thugTop();
+		var onScreen = sx > -120 && sx < window.innerWidth + 120 && t.state !== "gone";
+		t.el.style.display = onScreen ? "block" : "none";
+		if (!onScreen) {
+			t.bubble.hidden = true;
+			return;
+		}
+		var frame = THUG_FRAMES.idle;
+		if (t.state === "patrol") frame = Math.floor(t.stateTime * 5) % 2 ? THUG_FRAMES.walk1 : THUG_FRAMES.walk2;
+		else if (t.state === "rush") frame = Math.floor(t.stateTime * 10) % 2 ? THUG_FRAMES.walk1 : THUG_FRAMES.walk2;
+		else if (t.state === "thrust") frame = THUG_FRAMES.thrust;
+		else if (t.state === "down") frame = THUG_FRAMES.hurt;
+		t.el.style.backgroundPosition = (-frame * THUG_W) + "px 0px";
+		t.el.style.left = Math.round(sx - (t.facing < 0 ? THUG_W - THUG_TORSO : THUG_TORSO)) + "px";
+		t.el.style.top = Math.round(top) + "px";
+		t.el.style.transform = (t.facing < 0 ? "scaleX(-1)" : "") + (t.fall ? " rotate(" + (-90 * t.fall) + "deg)" : "");
+		t.el.style.opacity = t.fade;
+		if (now < t.bubbleUntil && t.state !== "down") {
+			t.bubble.hidden = false;
+			t.bubble.style.left = Math.round(sx) + "px";
+			t.bubble.style.top = Math.round(top - 26) + "px";
+		} else {
+			t.bubble.hidden = true;
+		}
+	}
+
+	(function thugTick(now){
+		var dt = Math.max(0, Math.min(0.05, (now - thugLast) / 1000));
+		thugLast = now;
+		if (sceneVersion !== thugSceneVersion) {
+			thugSceneVersion = sceneVersion;
+			setupThugs();
+		}
+		if (thugs.length) {
+			var cam = scene.camera(), ninjaX = worldX + 23;
+			var ninjaVisible = ninjaOpacity >= 0.4;
+			// Running makes noise; walking (and hanging in the air) doesn't
+			var noisy = running && !airborne && !stealthHeld && !!(heldArrows[37] || heldArrows[39]);
+			var spotted = false;
+			thugs.forEach(function(t){
+				t.stateTime += dt;
+				var gap = ninjaX - t.x, dist = Math.abs(gap), toward = gap < 0 ? -1 : 1;
+				var sx = t.x - cam, onScreen = sx > -80 && sx < window.innerWidth + 80;
+				var sees = ninjaVisible && onScreen && t.facing === toward && dist < (THUG_SIGHT[currentScene] || 400);
+				var unaware = t.state === "patrol" || t.state === "idle" || t.state === "lost";
+
+				if (unaware || t.state === "heard" || t.state === "look") {
+					if (sees) spotted = true;
+					else if (unaware && noisy && dist < THUG_HEARING && t.facing !== toward) {
+						t.noiseDir = toward;
+						setThugState(t, "heard");
+						say(t, "Eh?", false, 1);
+					}
+				}
+
+				if (t.state === "patrol") {
+					t.x += t.facing * THUG_WALK * dt;
+					if (t.x > t.home + 90) t.facing = -1;
+					else if (t.x < t.home - 90) t.facing = 1;
+					if (t.stateTime > 2.6) setThugState(t, "idle");
+				} else if (t.state === "idle") {
+					if (t.stateTime > 1.6) {
+						t.facing = -t.facing;
+						setThugState(t, "patrol");
+					}
+				} else if (t.state === "heard") {
+					// A moment of confusion, then turn toward the noise
+					if (t.stateTime > 0.45) {
+						t.facing = t.noiseDir;
+						setThugState(t, "look");
+					}
+				} else if (t.state === "look") {
+					if (t.stateTime > 1.4) setThugState(t, "patrol");
+				} else if (t.state === "alert") {
+					t.facing = toward;
+					if (t.stateTime > 0.35) setThugState(t, "rush");
+				} else if (t.state === "rush") {
+					if (!ninjaVisible) {
+						say(t, "?", false, 1.2);
+						t.home = t.x;
+						setThugState(t, "lost");
+					} else {
+						t.facing = toward;
+						if (dist > THUG_REACH) t.x += toward * THUG_RUSH * dt;
+						else setThugState(t, "windup");
+					}
+				} else if (t.state === "windup") {
+					t.facing = toward;
+					if (t.stateTime > 0.3) {
+						setThugState(t, "thrust");
+						if (ninjaVisible && !airborne && dist < THUG_REACH + 20) knockBackNinja(t.x);
+					}
+				} else if (t.state === "thrust") {
+					if (t.stateTime > 0.3) setThugState(t, "recover");
+				} else if (t.state === "recover") {
+					if (t.stateTime > 0.6) setThugState(t, "rush");
+				} else if (t.state === "lost") {
+					if (t.stateTime > 1.6) setThugState(t, "patrol");
+				} else if (t.state === "down") {
+					// Fall over backwards, lie there a moment, then fade away
+					t.fall = Math.min(1, t.stateTime / 0.35);
+					t.fade = t.stateTime < 0.9 ? 1 : Math.max(0, 1 - (t.stateTime - 0.9) / 0.9);
+					if (t.stateTime > 1.8) setThugState(t, "gone");
+				}
+				drawThug(t, cam, now);
+			});
+			if (spotted) alertThugs();
+		}
+		requestAnimationFrame(thugTick);
+	})(thugLast);
 </script>
 </html>
