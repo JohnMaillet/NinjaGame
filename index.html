@@ -135,11 +135,12 @@ html, body {
 <div id="starCount" hidden></div>
 <label id="scenePicker">Scene:
 	<select id="sceneSelect">
+		<option value="map">Village Map (top-down)</option>
 		<option value="dojo">Sunset Dojo</option>
 		<option value="forest">Moonlit Bamboo Forest</option>
 	</select>
 </label>
-<div id="hint">&larr; &rarr;: walk &middot; Shift: run &middot; Space: jump (hold an arrow to jump sideways) &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; attack mid-jump &middot; kick the gate for ninja stars, T: throw &middot; hold S: stealth &middot; other keys: punch</div>
+<div id="hint">&larr; &rarr;: walk &middot; Shift: run &middot; Space: jump (hold an arrow to jump sideways) &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; attack mid-jump &middot; kick the gate for ninja stars, T: throw &middot; hold S: stealth &middot; other keys: punch &middot; walk left from a scene's start: village map</div>
 </body>
 
 <script>
@@ -160,7 +161,7 @@ html, body {
 		var stars = [], clouds = [], particles = [], sparks = [], trees = [];
 		var shuriken = [], thrown = [], collectHandler = null, gateShake = 0, lastGateKick = -1;
 		var flash = 0, shake = 0, time = 0, last = performance.now(), shadowY = null;
-		var theme;
+		var theme, renderer = null;
 
 		function seeded(seed){
 			return function(){
@@ -735,12 +736,55 @@ html, body {
 			gateShake = 0;
 		}
 
+		// Punch sparks and stealth smoke
+		function drawSparks(dt, camDelta){
+			for (var k = sparks.length - 1; k >= 0; k--) {
+				var sp = sparks[k];
+				sp.life -= dt;
+				if (sp.life <= 0) { sparks.splice(k, 1); continue; }
+				sp.vy += sp.gravity * dt;
+				sp.x += sp.vx * dt - camDelta;
+				sp.y += sp.vy * dt;
+				ctx.globalAlpha = sp.life / sp.max;
+				ctx.fillStyle = sp.color;
+				ctx.save();
+				ctx.translate(sp.x, sp.y);
+				ctx.rotate(Math.atan2(sp.vy, sp.vx));
+				ctx.beginPath();
+				ctx.ellipse(0, 0, sp.size * sp.stretch, sp.size * (sp.stretch > 1 ? 0.6 : 1), 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.restore();
+			}
+			ctx.globalAlpha = 1;
+		}
+
+		// Red flash when a hit lands
+		function drawFlash(dt){
+			if (flash > 0) {
+				ctx.fillStyle = "rgba(255, 40, 40, " + (flash * 0.45) + ")";
+				ctx.fillRect(0, 0, W, H);
+				flash = Math.max(0, flash - dt * 2.5);
+			}
+		}
+
 		function frame(now){
 			var dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
 			last = now;
 			time += dt;
 			var camDelta = cameraX - lastCameraX;
 			lastCameraX = cameraX;
+
+			// Another view (the village map) is drawing instead of the side-scrolling scene
+			if (renderer) {
+				ctx.save();
+				renderer(ctx, W, H, dt, time);
+				drawSparks(dt, 0);
+				ctx.restore();
+				drawFlash(dt);
+				fctx.clearRect(0, 0, W, H);
+				requestAnimationFrame(frame);
+				return;
+			}
 
 			ctx.save();
 			var shakeX = 0, shakeY = 0;
@@ -883,33 +927,11 @@ html, body {
 
 			theme.drawOverhead();
 
-			// Punch sparks and stealth smoke
-			for (var k = sparks.length - 1; k >= 0; k--) {
-				var sp = sparks[k];
-				sp.life -= dt;
-				if (sp.life <= 0) { sparks.splice(k, 1); continue; }
-				sp.vy += sp.gravity * dt;
-				sp.x += sp.vx * dt - camDelta;
-				sp.y += sp.vy * dt;
-				ctx.globalAlpha = sp.life / sp.max;
-				ctx.fillStyle = sp.color;
-				ctx.save();
-				ctx.translate(sp.x, sp.y);
-				ctx.rotate(Math.atan2(sp.vy, sp.vx));
-				ctx.beginPath();
-				ctx.ellipse(0, 0, sp.size * sp.stretch, sp.size * (sp.stretch > 1 ? 0.6 : 1), 0, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.restore();
-			}
-			ctx.globalAlpha = 1;
+			drawSparks(dt, camDelta);
 
 			ctx.restore();
 
-			if (flash > 0) {
-				ctx.fillStyle = "rgba(255, 40, 40, " + (flash * 0.45) + ")";
-				ctx.fillRect(0, 0, W, H);
-				flash = Math.max(0, flash - dt * 2.5);
-			}
+			drawFlash(dt);
 
 			// Foreground, in front of the ninja
 			fctx.clearRect(0, 0, W, H);
@@ -930,6 +952,10 @@ html, body {
 		return {
 			// Switches to one of the scenes in THEMES ("dojo" or "forest")
 			setTheme: setTheme,
+			// fn(ctx, width, height, dt, time) draws instead of the side-scrolling scene; null to go back
+			setRenderer: function(fn){
+				renderer = fn;
+			},
 			hit: function(x, y){
 				flash = 1;
 				shake = 8;
@@ -981,6 +1007,317 @@ html, body {
 			// Top of the ninja image when its feet are on the path
 			groundTop: function(){
 				return Math.round(groundY - 42);
+			}
+		};
+	})();
+
+	// ---- Village map: a top-down, Zelda-style overworld ----
+	// The map is a grid of tiles laid out in buildMap() (edit it to reshape the village). The ninja
+	// walks in all four directions; walking through the torii gate at the top or along the path
+	// through the bamboo on the right leads into those side-scrolling scenes.
+	var worldMap = (function(){
+		var TILE = 48, COLS = 48, ROWS = 30;
+		// Tiles the ninja can't walk through
+		var BLOCKING = "Tbrws~H";
+		// Where the ninja appears on the map, by the scene it just left (feet position in pixels)
+		var SPAWNS = {
+			dojo: { x: 24 * TILE, y: 3 * TILE },
+			forest: { x: 45 * TILE, y: 16 * TILE },
+			village: { x: 21 * TILE, y: 17.5 * TILE }
+		};
+		var grid = [], houses = [];
+		var camX = 0, camY = 0, offsetX = 0, offsetY = 0;
+
+		// Repeatable pseudo-random number in [0, 1) for a given number
+		function hash(n){
+			var x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+			return x - Math.floor(x);
+		}
+
+		function fill(x, y, w, h, ch){
+			for (var r = y; r < y + h; r++) {
+				for (var c = x; c < x + w; c++) grid[r][c] = ch;
+			}
+		}
+
+		// Legend: . grass   , flowers   T tree   b bamboo   = dirt path   ~ water   # bridge
+		//         c crops   r rock   w well   s stone lantern   H house
+		//         D gate to the Sunset Dojo   F path to the Moonlit Bamboo Forest
+		function buildMap(){
+			for (var r = 0; r < ROWS; r++) {
+				grid.push([]);
+				for (var c = 0; c < COLS; c++) grid[r].push(hash(c * 97 + r * 31) < 0.08 ? "," : ".");
+			}
+			// Trees around the edge and in a few clumps
+			fill(0, 0, COLS, 1, "T");
+			fill(0, ROWS - 1, COLS, 1, "T");
+			fill(0, 0, 1, ROWS, "T");
+			fill(COLS - 1, 0, 1, ROWS, "T");
+			fill(1, 1, 3, 2, "T");
+			fill(18, 1, 4, 3, "T");
+			fill(26, 1, 3, 2, "T");
+			fill(1, 26, 2, 3, "T");
+			fill(26, 24, 7, 5, "T");
+			fill(12, 28, 9, 1, "T");
+			fill(37, 3, 2, 3, "T");
+			// A river, with a bamboo grove on the far bank
+			fill(35, 1, 2, ROWS - 2, "~");
+			fill(39, 1, 8, ROWS - 2, "b");
+			// Pond and crop field
+			fill(14, 24, 6, 4, "~");
+			fill(3, 24, 8, 4, "c");
+			// Paths: north-south, east-west (over the bridge and through the grove), the plaza and a southern lane
+			fill(23, 1, 2, ROWS - 3, "=");
+			fill(2, 15, 45, 2, "=");
+			fill(35, 15, 2, 2, "#");
+			fill(18, 11, 11, 8, "=");
+			fill(7, 23, 25, 1, "=");
+			// Houses; each door faces south, onto a path
+			houses = [
+				{ x: 5, y: 4, w: 5, h: 4, roof: "#b5473a" },
+				{ x: 12, y: 4, w: 5, h: 4, roof: "#3f6fa8" },
+				{ x: 29, y: 4, w: 5, h: 4, roof: "#4f8a4a" },
+				{ x: 5, y: 19, w: 5, h: 4, roof: "#8a5a3c" },
+				{ x: 29, y: 19, w: 5, h: 4, roof: "#a8457a" }
+			];
+			houses.forEach(function(house){
+				fill(house.x, house.y, house.w, house.h, "H");
+				// Northern houses get a short path down to the main road
+				if (house.y < 10) fill(house.x + 2, house.y + house.h, 1, 15 - (house.y + house.h), "=");
+			});
+			// Well, lanterns around the plaza, and rocks
+			grid[13][21] = "w";
+			grid[11][18] = grid[11][28] = grid[18][18] = grid[18][28] = "s";
+			grid[10][33] = grid[19][12] = grid[22][37] = grid[21][21] = "r";
+			// The ways out
+			fill(23, 0, 2, 1, "D");
+			fill(COLS - 1, 15, 1, 2, "F");
+		}
+
+		function tileAt(px, py){
+			var c = Math.floor(px / TILE), r = Math.floor(py / TILE);
+			if (c < 0 || r < 0 || c >= COLS || r >= ROWS) return "T";
+			return grid[r][c];
+		}
+
+		// Whether the ninja's feet (a small box around the given point) fit on walkable tiles
+		function canStand(x, y){
+			var corners = [[x - 12, y - 10], [x + 12, y - 10], [x - 12, y - 1], [x + 12, y - 1]];
+			for (var i = 0; i < corners.length; i++) {
+				if (BLOCKING.indexOf(tileAt(corners[i][0], corners[i][1])) >= 0) return false;
+			}
+			return true;
+		}
+
+		function drawGround(ctx, ch, x, y, c, r, time){
+			if (ch === "=" || ch === "D" || ch === "F") {
+				ctx.fillStyle = "#d9bf8c";
+				ctx.fillRect(x, y, TILE, TILE);
+				ctx.fillStyle = "rgba(120, 90, 50, 0.35)";
+				ctx.fillRect(x + hash(c * 7 + r) * 40, y + hash(r * 11 + c) * 40, 3, 3);
+				ctx.fillRect(x + hash(c * 13 + r * 3) * 40, y + hash(r * 5 + c * 9) * 40, 2, 2);
+			} else if (ch === "~" || ch === "#") {
+				ctx.fillStyle = "#4a90c2";
+				ctx.fillRect(x, y, TILE, TILE);
+				ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+				var wobble = Math.sin(time * 2 + c * 0.9 + r * 0.6) * 6;
+				ctx.fillRect(x + 8 + wobble, y + 14, 14, 2);
+				ctx.fillRect(x + 24 - wobble, y + 32, 12, 2);
+				if (ch === "#") {
+					ctx.fillStyle = "#9b6b43";
+					ctx.fillRect(x, y + 2, TILE, TILE - 4);
+					ctx.fillStyle = "rgba(60, 35, 20, 0.45)";
+					for (var p = 0; p < TILE; p += 12) ctx.fillRect(x + p, y + 2, 2, TILE - 4);
+				}
+			} else if (ch === "c") {
+				ctx.fillStyle = "#8a6a44";
+				ctx.fillRect(x, y, TILE, TILE);
+				ctx.fillStyle = "#6fae4f";
+				for (var row = 0; row < 3; row++) {
+					for (var col = 0; col < 4; col++) ctx.fillRect(x + 5 + col * 11, y + 8 + row * 15, 5, 7);
+				}
+			} else {
+				ctx.fillStyle = ch === "b" ? "#5f8f55" : (hash(c * 31 + r * 17) < 0.5 ? "#7fb069" : "#79aa63");
+				ctx.fillRect(x, y, TILE, TILE);
+				if (ch === ",") {
+					ctx.fillStyle = hash(c + r * 3) < 0.5 ? "#f7a8c4" : "#ffe27a";
+					for (var f = 0; f < 3; f++) {
+						ctx.fillRect(x + 8 + hash(c * 5 + r * 7 + f) * 30, y + 8 + hash(c * 3 + r * 11 + f) * 30, 4, 4);
+					}
+				}
+			}
+		}
+
+		function drawLanternTop(ctx, cx, cy){
+			var glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, TILE * 0.7);
+			glow.addColorStop(0, "rgba(255, 200, 110, 0.4)");
+			glow.addColorStop(1, "rgba(255, 200, 110, 0)");
+			ctx.fillStyle = glow;
+			ctx.fillRect(cx - TILE * 0.7, cy - TILE * 0.7, TILE * 1.4, TILE * 1.4);
+			ctx.fillStyle = "#7a7480";
+			ctx.fillRect(cx - 12, cy - 12, 24, 24);
+			ctx.fillStyle = "#5a4e60";
+			ctx.fillRect(cx - 15, cy - 15, 30, 8);
+			ctx.fillStyle = "#ffd27a";
+			ctx.fillRect(cx - 5, cy - 3, 10, 9);
+		}
+
+		function drawObject(ctx, ch, x, y, c, r){
+			var cx = x + TILE / 2, cy = y + TILE / 2;
+			if (ch === "T") {
+				ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+				ctx.beginPath();
+				ctx.ellipse(cx + 4, y + TILE - 6, TILE * 0.42, TILE * 0.18, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "#6b4a3a";
+				ctx.fillRect(cx - 4, cy, 8, TILE / 2 - 4);
+				var cherry = hash(c * 53 + r * 29) < 0.2;
+				ctx.fillStyle = cherry ? "#e98fb4" : "#3f7f4a";
+				ctx.beginPath();
+				ctx.arc(cx, cy - 6, TILE * 0.5, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = cherry ? "#ffc9dd" : "#5a9e5c";
+				ctx.beginPath();
+				ctx.arc(cx - 7, cy - 13, TILE * 0.22, 0, Math.PI * 2);
+				ctx.fill();
+			} else if (ch === "b") {
+				for (var i = 0; i < 4; i++) {
+					var bx = x + 8 + hash(c * 17 + r * 3 + i) * 32, by = y + 8 + hash(c * 7 + r * 19 + i) * 32;
+					ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
+					ctx.beginPath();
+					ctx.arc(bx + 3, by + 4, 7, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.fillStyle = i % 2 ? "#6fae5a" : "#4f8f45";
+					ctx.beginPath();
+					ctx.arc(bx, by, 7, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.fillStyle = "#8cc76e";
+					ctx.fillRect(bx - 1, by - 5, 2, 10);
+				}
+			} else if (ch === "r") {
+				ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+				ctx.beginPath();
+				ctx.ellipse(cx + 3, cy + 10, 16, 7, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "#8d8f95";
+				ctx.beginPath();
+				ctx.ellipse(cx, cy + 4, 16, 12, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "#b3b5bb";
+				ctx.beginPath();
+				ctx.ellipse(cx - 5, cy, 6, 4, 0, 0, Math.PI * 2);
+				ctx.fill();
+			} else if (ch === "w") {
+				ctx.fillStyle = "#9a9ca3";
+				ctx.beginPath();
+				ctx.arc(cx, cy, TILE * 0.44, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "#2d5f8a";
+				ctx.beginPath();
+				ctx.arc(cx, cy, TILE * 0.26, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+				ctx.beginPath();
+				ctx.arc(cx - 4, cy - 4, TILE * 0.08, 0, Math.PI * 2);
+				ctx.fill();
+			} else if (ch === "s") {
+				drawLanternTop(ctx, cx, cy);
+			} else if (ch === "D" && c === 23) {
+				// Red torii over the path north, the way to the Sunset Dojo
+				var gx = x + TILE, h = TILE * 1.6, base = y + TILE;
+				ctx.fillStyle = "#c7362f";
+				ctx.fillRect(gx - TILE * 0.85, base - h * 0.9, 8, h * 0.9);
+				ctx.fillRect(gx + TILE * 0.85 - 8, base - h * 0.9, 8, h * 0.9);
+				ctx.fillRect(gx - TILE, base - h * 0.72, TILE * 2, 7);
+				ctx.fillStyle = "#2a1a22";
+				ctx.fillRect(gx - TILE * 1.15, base - h, TILE * 2.3, 9);
+			} else if (ch === "F" && r === 15) {
+				// Lanterns either side of the path out to the bamboo forest
+				drawLanternTop(ctx, cx, y - 14);
+				drawLanternTop(ctx, cx, y + TILE * 2 + 14);
+			}
+		}
+
+		function drawHouse(ctx, house, ox, oy){
+			var x = ox + house.x * TILE, y = oy + house.y * TILE, w = house.w * TILE, h = house.h * TILE;
+			var wallH = h * 0.38, roofH = h - wallH;
+			ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+			ctx.fillRect(x + 6, y + 10, w, h);
+			// Front wall with a door and windows
+			ctx.fillStyle = "#e8d9b8";
+			ctx.fillRect(x, y + roofH, w, wallH);
+			ctx.fillStyle = "#6b4a3a";
+			ctx.fillRect(x + w / 2 - TILE * 0.3, y + roofH + wallH * 0.2, TILE * 0.6, wallH * 0.8);
+			ctx.fillStyle = "#8fc3e0";
+			ctx.fillRect(x + TILE * 0.5, y + roofH + wallH * 0.25, TILE * 0.6, TILE * 0.45);
+			ctx.fillRect(x + w - TILE * 1.1, y + roofH + wallH * 0.25, TILE * 0.6, TILE * 0.45);
+			// Roof, with a ridge and rows of tiles
+			ctx.fillStyle = house.roof;
+			ctx.fillRect(x - 6, y, w + 12, roofH + 4);
+			ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+			for (var ry = y + 8; ry < y + roofH; ry += 10) ctx.fillRect(x - 6, ry, w + 12, 2);
+			ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+			ctx.fillRect(x - 6, y + roofH / 2 - 2, w + 12, 4);
+		}
+
+		function label(ctx, text, x, y){
+			ctx.font = "bold 14px 'Segoe UI', system-ui, sans-serif";
+			ctx.textAlign = "center";
+			ctx.textBaseline = "middle";
+			var width = ctx.measureText(text).width;
+			ctx.fillStyle = "rgba(43, 27, 74, 0.75)";
+			ctx.fillRect(x - width / 2 - 8, y - 11, width + 16, 22);
+			ctx.fillStyle = "#ffe8c2";
+			ctx.fillText(text, x, y);
+		}
+
+		function render(ctx, w, h, dt, time){
+			ctx.fillStyle = "#2f5a34";
+			ctx.fillRect(0, 0, w, h);
+			var ox = Math.round(offsetX - camX), oy = Math.round(offsetY - camY);
+			// Only the tiles on screen
+			var c0 = Math.max(0, Math.floor(-ox / TILE) - 1), c1 = Math.min(COLS - 1, Math.floor((w - ox) / TILE) + 1);
+			var r0 = Math.max(0, Math.floor(-oy / TILE) - 1), r1 = Math.min(ROWS - 1, Math.floor((h - oy) / TILE) + 1);
+			var r, c;
+			for (r = r0; r <= r1; r++) {
+				for (c = c0; c <= c1; c++) drawGround(ctx, grid[r][c], ox + c * TILE, oy + r * TILE, c, r, time);
+			}
+			houses.forEach(function(house){ drawHouse(ctx, house, ox, oy); });
+			for (r = r0; r <= r1; r++) {
+				for (c = c0; c <= c1; c++) drawObject(ctx, grid[r][c], ox + c * TILE, oy + r * TILE, c, r);
+			}
+			label(ctx, "▲ Sunset Dojo", ox + 24 * TILE, oy + 2.2 * TILE);
+			label(ctx, "Bamboo Forest ▶", ox + 43.5 * TILE, oy + 14 * TILE);
+		}
+
+		buildMap();
+
+		return {
+			// Draws the map; used as the scene's renderer while the map is showing
+			render: render,
+			// Where to put the ninja when arriving from a scene ("dojo", "forest") or anywhere else
+			spawn: function(fromScene){
+				var p = SPAWNS[fromScene] || SPAWNS.village;
+				return { x: p.x, y: p.y };
+			},
+			// Moves a feet position by dx, dy, sliding along anything in the way
+			move: function(pos, dx, dy){
+				if (dx && canStand(pos.x + dx, pos.y)) pos.x += dx;
+				if (dy && canStand(pos.x, pos.y + dy)) pos.y += dy;
+			},
+			// The scene a position leads into ("dojo" or "forest"), or null
+			portalAt: function(pos){
+				var ch = tileAt(pos.x, pos.y - 5);
+				return ch === "D" ? "dojo" : ch === "F" ? "forest" : null;
+			},
+			// Centers the view on a map position (clamped to the map's edges) and returns its screen position
+			follow: function(pos, w, h){
+				var worldW = COLS * TILE, worldH = ROWS * TILE;
+				if (worldW <= w) { camX = 0; offsetX = (w - worldW) / 2; }
+				else { offsetX = 0; camX = Math.max(0, Math.min(worldW - w, pos.x - w / 2)); }
+				if (worldH <= h) { camY = 0; offsetY = (h - worldH) / 2; }
+				else { offsetY = 0; camY = Math.max(0, Math.min(worldH - h, pos.y - 25 - h / 2)); }
+				return { x: pos.x - camX + offsetX, y: pos.y - camY + offsetY };
 			}
 		};
 	})();
@@ -1160,6 +1497,33 @@ html, body {
 					if (i === 4 || i === 12) noise(t, 0.03, 0.07, "highpass", 8000);
 					if (bar >= 4 && i === 14) noise(t, 0.04, 0.12, "bandpass", 3000);
 				}
+			},
+
+			// Village map: cheerful and bouncy, Japanese "yo" scale (D, E, G, A, B)
+			village: {
+				bpm: 120,
+				melody: [
+					74,_,71,_, 69,_,71,74, 76,_,74,_, 71,_,69,_,
+					67,_,69,_, 71,_,69,67, 64,_,67,_, 69,_,_,_,
+					74,_,71,_, 69,_,71,74, 79,_,76,_, 74,_,71,_,
+					69,_,71,_, 67,_,64,_, 62,_,_,_, _,_,_,_
+				],
+				bassRoots: [38, 43, 40, 45],
+				play: function(s, t){
+					var m = this.melody, len = m.length;
+					var bar = Math.floor(s / 16) % 4, i = s % 16, note = m[s % len];
+
+					if (note !== null) tone(waves.lead, mtof(note), t, noteLength(m, s % len, 4), 0.26, 5000);
+					// A soft echo an octave down
+					var echoNote = m[(s - 2 + len) % len];
+					if (echoNote !== null && s >= 2) tone(waves.echo, mtof(echoNote - 12), t, this.step * 1.2, 0.07, 3000);
+					// "Oom-pah" bass: the root on the beat, the fifth in between
+					if (i % 4 === 0) tone("triangle", mtof(this.bassRoots[bar]), t, this.step * 1.8, 0.7, 8000);
+					if (i % 4 === 2) tone("triangle", mtof(this.bassRoots[bar] + 7), t, this.step * 1.5, 0.5, 8000);
+					if (i === 0 || i === 8) kick(t);
+					if (i === 4 || i === 12) noise(t, 0.08, 0.3, "bandpass", 2200);
+					if (i % 2 === 1) noise(t, 0.02, 0.08, "highpass", 8000);
+				}
 			}
 		};
 		for (var name in SONGS) SONGS[name].step = 60 / SONGS[name].bpm / 4;
@@ -1197,7 +1561,7 @@ html, body {
 		return {
 			start: start,
 			context: function(){ return ctx; },
-			// Switches to one of the songs in SONGS ("dojo" or "forest"), starting it from the top
+			// Switches to one of the songs in SONGS ("dojo", "forest" or "village"), starting it from the top
 			setSong: function(name){
 				var next = SONGS[name];
 				if (!next || next === song) return;
@@ -1255,19 +1619,24 @@ html, body {
 				.catch(function(){});
 		}
 
-		function play(name, duckSeconds, duckLevel){
-			music.duck(duckSeconds, duckLevel);
+		// volume: 1 = as recorded. duckLevel: how far to turn the music down meanwhile (1 = not at all)
+		function play(name, duckSeconds, duckLevel, volume){
+			if (volume === undefined) volume = 1;
+			if (duckLevel < 1) music.duck(duckSeconds, duckLevel);
 			if (ctx && buffers[name]) {
 				if (ctx.state === "suspended") ctx.resume();
 				// Restart the clip rather than stacking copies of it
 				if (playing[name]) { try { playing[name].stop(); } catch (e) {} }
-				var src = ctx.createBufferSource();
+				var src = ctx.createBufferSource(), gain = ctx.createGain();
 				src.buffer = buffers[name];
-				src.connect(ctx.destination);
+				gain.gain.value = volume;
+				src.connect(gain);
+				gain.connect(ctx.destination);
 				src.start(0, offsets[name]);
 				playing[name] = src;
 			} else if (fallback[name]) {
 				var a = fallback[name];
+				a.volume = volume;
 				a.currentTime = 0;
 				var p = a.play();
 				if (p && p.catch) p.catch(function(){});
@@ -1311,9 +1680,9 @@ html, body {
 	sfx.load('stepLeft', root + 'StepLeft.Wav');
 	sfx.load('stepRight', root + 'StepRight.Wav');
 	var audioPunch = { play: function(){ sfx.play('punch', 0.5, 0.3); } };
-	// Footsteps (a crinkling chip bag) only play while running
-	var audioStepLeft = { play: function(){ sfx.play('stepLeft', 0.2, 0.8); } };
-	var audioStepRight = { play: function(){ sfx.play('stepRight', 0.2, 0.8); } };
+	// Footsteps (a crinkling chip bag) only play while running, at 30% volume so they sit under the music
+	var audioStepLeft = { play: function(){ sfx.play('stepLeft', 0, 1, 0.3); } };
+	var audioStepRight = { play: function(){ sfx.play('stepRight', 0, 1, 0.3); } };
 
 	var ninjaImg = document.getElementById("ninja");
 	var powImg = document.getElementById("pow");
@@ -1446,7 +1815,7 @@ html, body {
 		powImg.style.left = ((parseFloat(powImg.style.left) || 0) + hitX - powBox.width / 2 - powBox.left) + 'px';
 		powImg.style.top = ((parseFloat(powImg.style.top) || 0) + hitY - powBox.height / 2 - powBox.top) + 'px';
 		scene.hit(hitX, hitY);
-		if (isKick) scene.kick(hitX, hitY);
+		if (isKick && !mapMode) scene.kick(hitX, hitY);
 		audioPunch.play();
 	}
 
@@ -1643,7 +2012,16 @@ html, body {
 	var WALK_SPEED = 60, RUN_SPEED = 180;   // pixels per second
 	var WALK_STRIDE = 6, RUN_STRIDE = 18;   // pixels travelled per footstep
 	var heldArrows = {}, running = false;
-	var strideDistance = 0, rightFootNext = true, carryX = 0, lastWalkTick = performance.now();
+	var strideDistance = 0, rightFootNext = true, carryX = 0, carryY = 0, lastWalkTick = performance.now();
+
+	// Village map: the ninja's feet position on the map (which is quicker to cross on foot)
+	var mapMode = false, mapPos = { x: 0, y: 0 }, MAP_SPEEDUP = 1.6;
+
+	function placeOnMap(){
+		var screen = worldMap.follow(mapPos, window.innerWidth, window.innerHeight);
+		ninjaImg.style.left = Math.round(screen.x - 23) + 'px';
+		ninjaImg.style.top = Math.round(screen.y - 46) + 'px';
+	}
 
 	// Moves the ninja along the world, which starts at x = 0 (the left edge of the first screen)
 	function moveNinjaBy(dx){
@@ -1652,6 +2030,10 @@ html, body {
 	}
 
 	function placeNinja(){
+		if (mapMode) {
+			placeOnMap();
+			return;
+		}
 		var cameraX = scene.follow(worldX + 23);
 		ninjaImg.style.left = Math.round(worldX - cameraX) + 'px';
 	}
@@ -1684,21 +2066,44 @@ html, body {
 	(function walkTick(now){
 		var dt = Math.max(0, Math.min(0.05, (now - lastWalkTick) / 1000));
 		lastWalkTick = now;
-		// Side-scroller: only left and right. Nothing works while becoming stealthy,
-		// and jumps pick their direction at takeoff.
+		// Side-scrolling scenes: only left and right. The village map: all four directions.
+		// Nothing works while becoming stealthy, and jumps pick their direction at takeoff.
 		var dx = (heldArrows[39] ? 1 : 0) - (heldArrows[37] ? 1 : 0);
-		if (stealthHeld || airborne || !dx) {
+		var dy = mapMode ? (heldArrows[40] ? 1 : 0) - (heldArrows[38] ? 1 : 0) : 0;
+		if (stealthHeld || airborne || (!dx && !dy)) {
 			strideDistance = RUN_STRIDE;   // so the next footstep lands right away
 			requestAnimationFrame(walkTick);
 			return;
 		}
-		var distance = (running ? RUN_SPEED : WALK_SPEED) * dt;
+		// Walking left off the start of a side-scrolling scene leads back to the village map
+		if (!mapMode && dx < 0 && worldX === 0 && !moveBusy) {
+			chooseScene("map", currentScene);
+			requestAnimationFrame(walkTick);
+			return;
+		}
+		var distance = (running ? RUN_SPEED : WALK_SPEED) * dt * (mapMode ? MAP_SPEEDUP : 1);
 		// Keep fractions of a pixel between frames so slow walking still moves on fast screens
-		carryX += dx * distance;
-		var moveX = Math.trunc(carryX);
+		var length = Math.sqrt(dx * dx + dy * dy);
+		carryX += dx / length * distance;
+		carryY += dy / length * distance;
+		var moveX = Math.trunc(carryX), moveY = Math.trunc(carryY);
 		carryX -= moveX;
-		if (moveX) moveNinjaBy(moveX);
-		ninjaImg.style.transform = dx < 0 ? "scaleX(-1)" : "scaleX(1)";
+		carryY -= moveY;
+		if (mapMode) {
+			if (moveX || moveY) {
+				worldMap.move(mapPos, moveX, moveY);
+				placeOnMap();
+				var portal = worldMap.portalAt(mapPos);
+				if (portal) {
+					chooseScene(portal);
+					requestAnimationFrame(walkTick);
+					return;
+				}
+			}
+		} else if (moveX) {
+			moveNinjaBy(moveX);
+		}
+		if (dx) ninjaImg.style.transform = dx < 0 ? "scaleX(-1)" : "scaleX(1)";
 		strideDistance += distance;
 		if (strideDistance >= (running ? RUN_STRIDE : WALK_STRIDE)) {
 			strideDistance = 0;
@@ -1728,6 +2133,8 @@ html, body {
 		if (MOVE_KEYS[key]) {
 			// Stops the key from also counting as a punch (and Space from scrolling)
 			blockKey(e);
+			// No jumping, flying kicks or throwing on the village map
+			if (mapMode && (key === " " || key === "f" || key === "t")) return;
 			if (!e.repeat) MOVE_KEYS[key]();
 			return;
 		}
@@ -1743,13 +2150,32 @@ html, body {
 
 	// ---- Scene menu (for trying scenes out while the game is in development) ----
 	var sceneSelect = document.getElementById("sceneSelect");
+	var currentScene = "dojo";
 
-	function chooseScene(name){
-		scene.setTheme(name);
-		music.setSong(name);
-		// Start the new scene back at the beginning of its world
-		worldX = Math.round(window.innerWidth * 0.3);
-		placeNinja();
+	// name: "map", "dojo" or "forest". fromScene: the scene being left, so the village map can
+	// put the ninja next to the way back into it.
+	function chooseScene(name, fromScene){
+		currentScene = name;
+		sceneSelect.value = name;
+		carryX = carryY = 0;
+		if (name === "map") {
+			mapMode = true;
+			scene.setRenderer(worldMap.render);
+			music.setSong("village");
+			var spawn = worldMap.spawn(fromScene);
+			mapPos.x = spawn.x;
+			mapPos.y = spawn.y;
+			placeOnMap();
+		} else {
+			mapMode = false;
+			scene.setRenderer(null);
+			scene.setTheme(name);
+			music.setSong(name);
+			// Start the scene back at the beginning of its world
+			worldX = Math.round(window.innerWidth * 0.3);
+			ninjaImg.style.top = scene.groundTop() + 'px';
+			placeNinja();
+		}
 		try { localStorage.setItem("ninjaScene", name); } catch (e) {}
 	}
 
