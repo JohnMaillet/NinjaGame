@@ -1021,12 +1021,14 @@ html, body {
 		var BLOCKING = "Tbrws~H";
 		// Where the ninja appears on the map, by the scene it just left (feet position in pixels)
 		var SPAWNS = {
-			dojo: { x: 24 * TILE, y: 3 * TILE },
+			dojo: { x: 24 * TILE, y: 4 * TILE },
 			forest: { x: 45 * TILE, y: 16 * TILE },
 			village: { x: 21 * TILE, y: 17.5 * TILE }
 		};
 		var grid = [], houses = [];
 		var camX = 0, camY = 0, offsetX = 0, offsetY = 0;
+		// Room above the map's top edge so the Scene menu doesn't cover the gate
+		var TOP_MARGIN = 70;
 
 		// Repeatable pseudo-random number in [0, 1) for a given number
 		function hash(n){
@@ -1067,7 +1069,7 @@ html, body {
 			fill(14, 24, 6, 4, "~");
 			fill(3, 24, 8, 4, "c");
 			// Paths: north-south, east-west (over the bridge and through the grove), the plaza and a southern lane
-			fill(23, 1, 2, ROWS - 3, "=");
+			fill(23, 2, 2, ROWS - 4, "=");
 			fill(2, 15, 45, 2, "=");
 			fill(35, 15, 2, 2, "#");
 			fill(18, 11, 11, 8, "=");
@@ -1090,7 +1092,7 @@ html, body {
 			grid[11][18] = grid[11][28] = grid[18][18] = grid[18][28] = "s";
 			grid[10][33] = grid[19][12] = grid[22][37] = grid[21][21] = "r";
 			// The ways out
-			fill(23, 0, 2, 1, "D");
+			fill(23, 1, 2, 1, "D");
 			fill(COLS - 1, 15, 1, 2, "F");
 		}
 
@@ -1286,7 +1288,7 @@ html, body {
 			for (r = r0; r <= r1; r++) {
 				for (c = c0; c <= c1; c++) drawObject(ctx, grid[r][c], ox + c * TILE, oy + r * TILE, c, r);
 			}
-			label(ctx, "▲ Sunset Dojo", ox + 24 * TILE, oy + 2.2 * TILE);
+			label(ctx, "▲ Sunset Dojo", ox + 27 * TILE, oy + 3.4 * TILE);
 			label(ctx, "Bamboo Forest ▶", ox + 43.5 * TILE, oy + 14 * TILE);
 		}
 
@@ -1316,7 +1318,7 @@ html, body {
 				if (worldW <= w) { camX = 0; offsetX = (w - worldW) / 2; }
 				else { offsetX = 0; camX = Math.max(0, Math.min(worldW - w, pos.x - w / 2)); }
 				if (worldH <= h) { camY = 0; offsetY = (h - worldH) / 2; }
-				else { offsetY = 0; camY = Math.max(0, Math.min(worldH - h, pos.y - 25 - h / 2)); }
+				else { offsetY = 0; camY = Math.max(-TOP_MARGIN, Math.min(worldH - h, pos.y - 25 - h / 2)); }
 				return { x: pos.x - camX + offsetX, y: pos.y - camY + offsetY };
 			}
 		};
