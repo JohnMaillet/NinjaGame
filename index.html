@@ -57,6 +57,15 @@ html, body {
   color: rgba(70, 30, 45, 0.75);
   pointer-events: none;
 }
+
+#moves {
+  position: absolute;
+  width: 64px;
+  height: 50px;
+  background: url(Resources/Images/Ninja_Moves.png) 0 0;
+  display: none;
+  pointer-events: none;
+}
 </style>
 </head>
 <body>
@@ -64,11 +73,12 @@ html, body {
 <div class="imgContainer">
 	<img id="ninja" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
+<div id="moves"></div>
 <div class="imgContainer">
 	<img id="pow" src="Resources/Images/img_trans.gif" width="1" height="1"><br><br>
 </div>
 <button id="musicBtn" type="button">&#9835; Music: On</button>
-<div id="hint">Arrow keys to move &middot; any other key to strike &middot; music starts with your first key</div>
+<div id="hint">Arrows: move &middot; Space: jump &middot; K: side kick &middot; R: roundhouse &middot; F: flying kick &middot; hold S: stealth &middot; other keys: punch</div>
 </body>
 
 <script>
@@ -414,6 +424,16 @@ html, body {
 			drawTorii(W * 0.12 + px * 70, horizon + (H - horizon) * 0.4, H * 0.3);
 			drawTree(px * 110);
 
+			// Ground shadow under the ninja while it's in the air (shrinks as it rises)
+			if (shadowY !== null) {
+				var lift = shadowY - (ninja.offsetTop + 48);
+				var shrink = Math.max(0.5, 1 - lift / 160);
+				ctx.fillStyle = "rgba(26, 0, 102, " + (0.35 * (parseFloat(ninja.style.opacity) || 1)) + ")";
+				ctx.beginPath();
+				ctx.ellipse(ninja.offsetLeft + 23, shadowY, 16 * shrink, 4 * shrink, 0, 0, Math.PI * 2);
+				ctx.fill();
+			}
+
 			// Falling petals
 			for (var p = 0; p < petals.length; p++) {
 				var pt = petals[p];
@@ -433,12 +453,12 @@ html, body {
 
 			drawLanterns();
 
-			// Punch sparks
+			// Punch sparks and stealth smoke
 			for (var s = sparks.length - 1; s >= 0; s--) {
 				var sp = sparks[s];
 				sp.life -= dt;
 				if (sp.life <= 0) { sparks.splice(s, 1); continue; }
-				sp.vy += 420 * dt;
+				sp.vy += sp.gravity * dt;
 				sp.x += sp.vx * dt;
 				sp.y += sp.vy * dt;
 				ctx.globalAlpha = sp.life / sp.max;
@@ -447,7 +467,7 @@ html, body {
 				ctx.translate(sp.x, sp.y);
 				ctx.rotate(Math.atan2(sp.vy, sp.vx));
 				ctx.beginPath();
-				ctx.ellipse(0, 0, sp.size * 1.6, sp.size * 0.6, 0, 0, Math.PI * 2);
+				ctx.ellipse(0, 0, sp.size * sp.stretch, sp.size * (sp.stretch > 1 ? 0.6 : 1), 0, 0, Math.PI * 2);
 				ctx.fill();
 				ctx.restore();
 			}
@@ -464,6 +484,7 @@ html, body {
 			requestAnimationFrame(frame);
 		}
 
+		var shadowY = null;
 		window.addEventListener("resize", resize);
 		resize();
 		requestAnimationFrame(frame);
@@ -477,8 +498,21 @@ html, body {
 					var a = Math.random() * Math.PI * 2;
 					var v = 120 + Math.random() * 220;
 					var life = 0.6 + Math.random() * 0.4;
-					sparks.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, life: life, max: life, size: 2.5 + Math.random() * 2.5, color: colors[i % 3] });
+					sparks.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, life: life, max: life, size: 2.5 + Math.random() * 2.5, color: colors[i % 3], gravity: 420, stretch: 1.6 });
 				}
+			},
+			// Drifting smoke puff for when the ninja slips into stealth
+			puff: function(x, y){
+				for (var i = 0; i < 16; i++) {
+					var a = Math.random() * Math.PI * 2;
+					var v = 20 + Math.random() * 60;
+					var life = 0.8 + Math.random() * 0.6;
+					sparks.push({ x: x + Math.cos(a) * 8, y: y + Math.sin(a) * 12, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.5 - 30, life: life, max: life, size: 5 + Math.random() * 6, color: "rgba(235, 225, 240, 0.8)", gravity: -20, stretch: 1 });
+				}
+			},
+			// Ground-level y for the ninja's shadow while airborne, or null when landed
+			setShadow: function(y){
+				shadowY = y;
 			}
 		};
 	})();
@@ -709,7 +743,22 @@ html, body {
 			}
 		}
 
-		return { load: load, play: play };
+		// NES-style "boing" for jumps
+		function jump(){
+			if (!ctx) return;
+			if (ctx.state === "suspended") ctx.resume();
+			var t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+			o.type = "square";
+			o.frequency.setValueAtTime(220, t);
+			o.frequency.exponentialRampToValueAtTime(880, t + 0.16);
+			g.gain.setValueAtTime(0.08, t);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+			o.connect(g); g.connect(ctx.destination);
+			o.start(t);
+			o.stop(t + 0.22);
+		}
+
+		return { load: load, play: play, jump: jump };
 	})();
 
 	document.addEventListener("keydown", function(){ music.start(); });
@@ -794,7 +843,231 @@ html, body {
 		setTimeout(standNeutral,600);
 	}
 
+	// ---- Special moves: jump, side kick, roundhouse kick and flying kick ----
+	// The poses live in Resources/Images/Ninja_Moves.png: 64x50 cells, all facing right.
+	// While a move plays, the regular ninja image is hidden and #moves shows the pose.
+	var movesImg = document.getElementById("moves");
+	var POSES = { crouch: 0, tuck: 1, sideChamber: 2, sideKick: 3, roundChamber: 4, roundKick: 5, flyingKick: 6 };
+	var POSE_W = 64, NINJA_W = 46;
+	var moveBusy = false, airborne = false, airKicked = false;
+	var MOVE_KEYS = { " ": jump, "k": sideKick, "r": roundhouse, "f": flyingKick };
+
+	function facingLeft(){
+		return window.getComputedStyle(ninjaImg).transform.charAt(7) == "-";
+	}
+
+	function showPose(name){
+		movesImg.style.backgroundPosition = (-POSES[name] * POSE_W) + "px 0px";
+		movesImg.style.display = "block";
+		ninjaImg.style.visibility = "hidden";
+		placePose();
+	}
+
+	// Keep the pose lined up with the (hidden) ninja, mirrored when facing left
+	function placePose(){
+		var left = facingLeft();
+		movesImg.style.left = (ninjaImg.offsetLeft - (left ? POSE_W - NINJA_W : 0)) + "px";
+		movesImg.style.top = ninjaImg.offsetTop + "px";
+		movesImg.style.transform = left ? "scaleX(-1)" : "none";
+	}
+
+	function startMove(){
+		if (moveBusy) return false;
+		moveBusy = true;
+		(function follow(){
+			if (!moveBusy) return;
+			placePose();
+			requestAnimationFrame(follow);
+		})();
+		return true;
+	}
+
+	function finishMove(){
+		moveBusy = false;
+		movesImg.style.display = "none";
+		ninjaImg.style.visibility = "visible";
+		standNeutral();
+	}
+
+	// Land a hit at a spot on the current pose (x, y in pose-cell pixels, facing right)
+	function strike(x, y){
+		placePose();
+		var box = movesImg.getBoundingClientRect();
+		var hitX = facingLeft() ? box.right - x : box.left + x;
+		var hitY = box.top + y;
+		powImg.style.backgroundPosition = '-175px 0px';
+		powImg.style.zIndex = -1;
+		var powBox = powImg.getBoundingClientRect();
+		powImg.style.left = ((parseFloat(powImg.style.left) || 0) + hitX - powBox.width / 2 - powBox.left) + 'px';
+		powImg.style.top = ((parseFloat(powImg.style.top) || 0) + hitY - powBox.height / 2 - powBox.top) + 'px';
+		scene.hit(hitX, hitY);
+		audioPunch.play();
+	}
+
+	function hidePow(){
+		powImg.style.backgroundPosition = '-230px 0px';
+	}
+
+	// Runs [delay in ms, step] pairs one after another
+	function sequence(steps){
+		var i = 0;
+		(function next(){
+			if (i >= steps.length) return;
+			var s = steps[i++];
+			setTimeout(function(){ s[1](); next(); }, s[0]);
+		})();
+	}
+
+	// Carries the ninja up and back down, optionally travelling forward
+	function leap(duration, height, forward, kickAt, onLand){
+		var groundTop = ninjaImg.offsetTop;
+		var dir = facingLeft() ? -1 : 1;
+		var start = performance.now(), travelled = 0;
+		airborne = true;
+		airKicked = false;
+		scene.setShadow(groundTop + 48);
+		(function tick(now){
+			// Frame timestamps can be a few ms older than `start`, so keep t from going negative
+			var t = Math.max(0, Math.min(1, (now - start) / duration));
+			ninjaImg.style.top = Math.round(groundTop - height * 4 * t * (1 - t)) + "px";
+			var travel = Math.round(dir * forward * t);
+			ninjaImg.style.left = (ninjaImg.offsetLeft + travel - travelled) + "px";
+			travelled = travel;
+			if (kickAt !== null && t >= kickAt) airKick();
+			if (t < 1) {
+				requestAnimationFrame(tick);
+			} else {
+				ninjaImg.style.top = groundTop + "px";
+				airborne = false;
+				scene.setShadow(null);
+				onLand();
+			}
+		})(start);
+	}
+
+	function airKick(){
+		if (airKicked) return;
+		airKicked = true;
+		showPose("flyingKick");
+		strike(44, 40);
+	}
+
+	function land(){
+		hidePow();
+		showPose("crouch");
+		setTimeout(finishMove, 100);
+	}
+
+	function jump(){
+		if (!startMove()) return;
+		showPose("crouch");
+		setTimeout(function(){
+			showPose("tuck");
+			sfx.jump();
+			leap(560, 80, 0, null, land);
+		}, 70);
+	}
+
+	function flyingKick(){
+		if (airborne) { airKick(); return; }
+		if (!startMove()) return;
+		showPose("crouch");
+		setTimeout(function(){
+			showPose("tuck");
+			sfx.jump();
+			leap(700, 70, 110, 0.2, land);
+		}, 80);
+	}
+
+	function sideKick(){
+		if (airborne) { airKick(); return; }
+		if (!startMove()) return;
+		sequence([
+			[0, function(){ showPose("sideChamber"); }],
+			[90, function(){ showPose("sideKick"); strike(42, 29); }],
+			[280, function(){ hidePow(); showPose("sideChamber"); }],
+			[90, finishMove]
+		]);
+	}
+
+	function roundhouse(){
+		if (airborne) { airKick(); return; }
+		if (!startMove()) return;
+		sequence([
+			[0, function(){ showPose("roundChamber"); }],
+			[110, function(){ showPose("roundKick"); strike(39, 12); }],
+			[300, function(){ hidePow(); showPose("roundChamber"); }],
+			[100, finishMove]
+		]);
+	}
+
+	// ---- Stealth mode: hold S to fade out; let go and the ninja slowly fades back in ----
+	// Becoming stealthy takes full concentration, so nothing else works while S is held.
+	var STEALTH_MIN_OPACITY = 0.1, STEALTH_FADE_OUT_SECONDS = 1.5, STEALTH_FADE_IN_SECONDS = 4;
+	var stealthHeld = false, ninjaOpacity = 1, lastStealthTick = performance.now();
+
+	function beginStealth(){
+		if (moveBusy || airborne || stealthHeld) return;
+		stealthHeld = true;
+		scene.puff(ninjaImg.offsetLeft + NINJA_W / 2, ninjaImg.offsetTop + 30);
+	}
+
+	document.addEventListener("keyup", function(e){
+		if ((e.key || "").toLowerCase() === "s") stealthHeld = false;
+	});
+	window.addEventListener("blur", function(){ stealthHeld = false; });
+
+	(function stealthTick(now){
+		var dt = Math.min(0.05, (now - lastStealthTick) / 1000);
+		lastStealthTick = now;
+		var range = 1 - STEALTH_MIN_OPACITY;
+		if (stealthHeld) ninjaOpacity = Math.max(STEALTH_MIN_OPACITY, ninjaOpacity - dt * range / STEALTH_FADE_OUT_SECONDS);
+		else ninjaOpacity = Math.min(1, ninjaOpacity + dt * range / STEALTH_FADE_IN_SECONDS);
+		ninjaImg.style.opacity = ninjaOpacity;
+		movesImg.style.opacity = ninjaOpacity;
+		requestAnimationFrame(stealthTick);
+	})(lastStealthTick);
+
+	// Swallow a key press so it doesn't also turn into a punch (browser shortcuts still work)
+	function blockKey(e){
+		if (!e.ctrlKey && !e.metaKey && !e.altKey) e.preventDefault();
+	}
+
+	// Left/right still steer while in the air (up/down don't)
+	function steerInAir(keyCode){
+		if (keyCode == 37) {
+			ninjaImg.style.left = (ninjaImg.offsetLeft - 2) + 'px';
+			ninjaImg.style.transform = "scaleX(-1)";
+		} else if (keyCode == 39) {
+			ninjaImg.style.left = (ninjaImg.offsetLeft + 2) + 'px';
+			ninjaImg.style.transform = "scaleX(1)";
+		}
+	}
+
 	function move(e){
+		var key = (e.key || "").toLowerCase();
+		if (key === "s") {
+			blockKey(e);
+			if (!e.repeat) beginStealth();
+			return;
+		}
+		if (stealthHeld) {
+			blockKey(e);
+			return;
+		}
+		if (MOVE_KEYS[key]) {
+			// Stops the key from also counting as a punch (and Space from scrolling)
+			blockKey(e);
+			if (!e.repeat) MOVE_KEYS[key]();
+			return;
+		}
+		if (airborne) {
+			blockKey(e);
+			steerInAir(e.keyCode);
+			return;
+		}
+		// No punching in the middle of a kick
+		if (moveBusy && (e.keyCode < 37 || e.keyCode > 40)) blockKey(e);
 
 		if(e.keyCode >=37 && e.keyCode <=40)
 		{
